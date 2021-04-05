@@ -38,7 +38,7 @@ class SshPersister(KvPersister):
     A basic ssh persister.
     Keys must be names of files.
 
-    >>> from py2store.persisters.ssh_persister import SshPersister
+    >>> from sshdol import SshPersister
     >>> s = SshPersister()
     >>> k = 'foo'
     >>> v = 'bar'
