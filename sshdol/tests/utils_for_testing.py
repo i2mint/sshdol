@@ -38,7 +38,7 @@ def _keys_as_expected(keys, max_keys=MAX_TEST_KEYS):
     A function that checks if the keys are as expected.
     The raison d'être of this function is to not mistakingly empty the wrong store.
     """
-    return len(keys) <= MAX_TEST_KEYS
+    return len(keys) <= max_keys
 
 
 def empty_test_store(
@@ -53,7 +53,9 @@ def empty_test_store(
     # so that the error message is more informative, and the function is more efficient
     # (don't need to fetch the keys twice)
     if store_as_expected(store):
-        keys = list(_first_n_keys_and_bust_if_more(store))
+        # Note: We're sorting the keys in reverse order, so that we don't run into the 
+        # "can't delete non-empty folder" problem. 
+        keys = sorted(_first_n_keys_and_bust_if_more(store), reverse=True)
         if keys_as_expected(keys):
             for k in keys:
                 del store[k]

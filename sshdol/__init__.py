@@ -3,6 +3,11 @@ SSH-based file access with Mapping interface.
 
 Provides read-only (SshFilesReader) and read-write (SshFiles) implementations
 for accessing remote files over SSH.
+
+|        | read-only          | read-write         |
+| :----- | :----------------- | :----------------- |
+| bytes  | SshFilesReader     | SshFiles           |
+| text   | SshTextFilesReader | SshTextFiles       |
 """
 
 from sshdol.base import (
