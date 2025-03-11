@@ -1,0 +1,5 @@
+{
+    "MAX_TEST_KEYS": 5,
+    "SSH_TEST_HOST": "thorwhalen",
+    "SSH_TEST_ROOTDIR": "/root/data/tests/sshdol"
+}
