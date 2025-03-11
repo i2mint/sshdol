@@ -2,7 +2,6 @@
 
 A Python dict-like interface to SSH files, built on [dol](https://github.com/i2mint/dol) (Data Object Layer).
 
-To install:	```pip install sshdol```
 
 ## What is sshdol?
 
