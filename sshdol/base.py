@@ -135,10 +135,12 @@ class SshFilesReader(Mapping):
                        0 = current directory only (default)
                        n = n levels of subdirectories
                        None = unlimited depth
+                       (Design notes: https://github.com/i2mint/sshdol/issues/1#issue-2910364290)
             create_dirs: Whether to create missing directories on write
                        (only relevant for writable stores)
             strict_contains: If True, __contains__ will raise KeyError for paths beyond max_levels
                             If False (default), it will return False for such paths
+                            Design notes: https://github.com/i2mint/sshdol/issues/1#issuecomment-2714508482
         """
         # Store initialization parameters
         self._init_params = {
@@ -429,6 +431,8 @@ class SshFilesReader(Mapping):
         Check if a file or directory exists.
         Supports path-based keys with slashes for nested files.
         Respects max_levels constraint based on strict_contains setting.
+
+        See https://github.com/i2mint/sshdol/issues/1#issuecomment-2714508482
         """
         path = normalize_path(k)
 

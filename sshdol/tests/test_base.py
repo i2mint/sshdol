@@ -163,6 +163,7 @@ def test_recursive_functionality():
 
     # Test that strict_contains=True will make 'in' operator raise KeyError
     # in case of depth violation
+    # See: https://github.com/i2mint/sshdol/issues/1#issuecomment-2714508482
     s_strict = SshFiles(
         host=SSH_TEST_HOST,
         rootdir=SSH_TEST_ROOTDIR,
