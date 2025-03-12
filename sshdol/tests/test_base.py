@@ -21,31 +21,31 @@ def test_simple_demo():
     assert list(s) == []  # s is empty
 
     print("Writing b'crumble' to 'apple' file...")
-    s['apple'] = b'crumble'  # make an apple file containing b'crumble'
+    s["apple"] = b"crumble"  # make an apple file containing b'crumble'
     print("Checking if 'apple' is in the store...")
-    assert 'apple' in s  # apple is now in s
+    assert "apple" in s  # apple is now in s
     print("Listing the files in the store...")
-    assert list(s) == ['apple']  # now, s has only one file, apple
+    assert list(s) == ["apple"]  # now, s has only one file, apple
     print("Checking the value of 'apple' is indeed b'crumble'...")
     assert (
-        s['apple'] == b'crumble'
+        s["apple"] == b"crumble"
     )  # see that the value of s['apple'] is indeed b'crumble'
 
     # Showing that trying to write a string will fail with
     # TypeError: When encoding is set to 'utf-8', value must be a string
     with pytest.raises(TypeError):
-        s['apple'] = 'crumble'
+        s["apple"] = "crumble"
 
     # But if we want to be reading and writing strings, we can use SshTextFiles
     # which is just a convenience class that sets encoding='utf-8' for us.
     # Or we can use SshFiles with encoding='utf-8' explicitly set:
-    text_s = SshFiles(encoding='utf-8', host=SSH_TEST_HOST, rootdir=SSH_TEST_ROOTDIR)
+    text_s = SshFiles(encoding="utf-8", host=SSH_TEST_HOST, rootdir=SSH_TEST_ROOTDIR)
 
-    text_s['apple.txt'] = 'sauce'  # make an apple file containing 'sauce'
-    assert 'apple.txt' in text_s  # apple is now in s
-    assert sorted(s) == ['apple', 'apple.txt']  # now, s has only one file, apple
+    text_s["apple.txt"] = "sauce"  # make an apple file containing 'sauce'
+    assert "apple.txt" in text_s  # apple is now in s
+    assert sorted(s) == ["apple", "apple.txt"]  # now, s has only one file, apple
     assert (
-        text_s['apple.txt'] == 'sauce'
+        text_s["apple.txt"] == "sauce"
     )  # see that the value of s['apple'] is indeed 'sauce'
 
 
@@ -93,17 +93,17 @@ def test_recursive_functionality():
     empty_test_store(s)
 
     # Test recursive write with directory creation (unlimited depth)
-    s['level0/level1/level2/file.txt'] = b'deep file content'
+    s["level0/level1/level2/file.txt"] = b"deep file content"
 
     # Test recursive read
-    assert s['level0/level1/level2/file.txt'] == b'deep file content'
+    assert s["level0/level1/level2/file.txt"] == b"deep file content"
 
     # Test recursive iteration (with unlimited depth)
     all_keys = list(s)
-    assert 'level0/' in all_keys
-    assert 'level0/level1/' in all_keys
-    assert 'level0/level1/level2/' in all_keys
-    assert 'level0/level1/level2/file.txt' in all_keys
+    assert "level0/" in all_keys
+    assert "level0/level1/" in all_keys
+    assert "level0/level1/level2/" in all_keys
+    assert "level0/level1/level2/file.txt" in all_keys
 
     # Test with limited recursion depth
     s_limited = SshFiles(
@@ -115,22 +115,22 @@ def test_recursive_functionality():
 
     # Should only see first level directories and files
     limited_keys = list(s_limited)
-    assert 'level0/' in limited_keys
-    assert 'level0/level1/' in limited_keys
-    assert 'level0/level1/level2/' not in limited_keys
+    assert "level0/" in limited_keys
+    assert "level0/level1/" in limited_keys
+    assert "level0/level1/level2/" not in limited_keys
 
     # Writing at allowed depth should work
-    s_limited['level0/file.txt'] = b'allowed depth content'
-    assert s_limited['level0/file.txt'] == b'allowed depth content'
+    s_limited["level0/file.txt"] = b"allowed depth content"
+    assert s_limited["level0/file.txt"] == b"allowed depth content"
 
     # Test that reading beyond max_levels raises KeyError with appropriate message
     with pytest.raises(KeyError) as excinfo:
-        _ = s_limited['level0/level1/level2/file.txt']
+        _ = s_limited["level0/level1/level2/file.txt"]
     assert "Path depth (3) exceeds maximum allowed depth (1)" in str(excinfo.value)
 
     # Test that writing beyond max_levels raises KeyError with appropriate message
     with pytest.raises(KeyError) as excinfo:
-        s_limited['level0/level1/file.txt'] = b'beyond max depth'
+        s_limited["level0/level1/file.txt"] = b"beyond max depth"
     assert "Path depth (2) exceeds maximum allowed depth (1)" in str(excinfo.value)
 
     # Test with level 0 (only root level)
@@ -142,24 +142,24 @@ def test_recursive_functionality():
 
     # Should be able to access files in the root
     root_keys = list(s_root_only)
-    assert 'level0/' in root_keys
-    assert 'level0/level1/' not in root_keys
+    assert "level0/" in root_keys
+    assert "level0/level1/" not in root_keys
 
     # Test that accessing even one level deep raises error
     with pytest.raises(KeyError) as excinfo:
-        _ = s_root_only['level0/file.txt']
+        _ = s_root_only["level0/file.txt"]
     assert "Path depth (1) exceeds maximum allowed depth (0)" in str(excinfo.value)
 
     # Test membership with recursion
-    assert 'level0/level1/level2/file.txt' in s  # Unlimited depth store
-    assert 'level0/level1/level2/nonexistent.txt' not in s
+    assert "level0/level1/level2/file.txt" in s  # Unlimited depth store
+    assert "level0/level1/level2/nonexistent.txt" not in s
 
     # Test length with recursion
     # Length should include all files and directories up to max_levels
     assert len(s) > len(s_limited)
 
     # Test membership check also respects max_levels
-    assert 'level0/level1/file.txt' not in s_limited
+    assert "level0/level1/file.txt" not in s_limited
 
     # Test that strict_contains=True will make 'in' operator raise KeyError
     # in case of depth violation
@@ -172,6 +172,5 @@ def test_recursive_functionality():
     )
 
     with pytest.raises(KeyError) as excinfo:
-        'level0/level1/file.txt' in s_strict  # Will now raise KeyError
+        "level0/level1/file.txt" in s_strict  # Will now raise KeyError
     assert "Path depth (2) exceeds maximum allowed depth (1)" in str(excinfo.value)
-

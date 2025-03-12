@@ -19,7 +19,7 @@ import stat
 import paramiko
 from functools import lru_cache
 
-places_to_look_for_default_key = ['~/.ssh/id_rsa', '~/.ssh/id_ed25519']
+places_to_look_for_default_key = ["~/.ssh/id_rsa", "~/.ssh/id_ed25519"]
 
 
 def get_ssh_config_for_host(host):
@@ -55,14 +55,14 @@ def normalize_path(path: str) -> str:
         Normalized path
     """
     # Handle empty paths and root directory
-    if not path or path == '.':
-        return ''
+    if not path or path == ".":
+        return ""
 
     # Remove trailing slash if present
-    path = path[:-1] if path.endswith('/') else path
+    path = path[:-1] if path.endswith("/") else path
 
     # Normalize path separators to forward slashes
-    return path.replace('\\', '/')
+    return path.replace("\\", "/")
 
 
 def split_path(path: str) -> Tuple[str, str]:
@@ -77,11 +77,11 @@ def split_path(path: str) -> Tuple[str, str]:
     """
     path = normalize_path(path)
 
-    if '/' not in path:
-        return '', path
+    if "/" not in path:
+        return "", path
 
-    parts = path.split('/')
-    return '/'.join(parts[:-1]), parts[-1]
+    parts = path.split("/")
+    return "/".join(parts[:-1]), parts[-1]
 
 
 class SshFilesReader(Mapping):
@@ -144,17 +144,17 @@ class SshFilesReader(Mapping):
         """
         # Store initialization parameters
         self._init_params = {
-            'host': host,
-            'user': user,
-            'password': password,
-            'url': url,
-            'port': port,
-            'key_filename': key_filename,
-            'include_hidden': include_hidden,
-            'encoding': encoding,
-            'max_levels': max_levels,
-            'create_dirs': create_dirs,
-            'strict_contains': strict_contains,
+            "host": host,
+            "user": user,
+            "password": password,
+            "url": url,
+            "port": port,
+            "key_filename": key_filename,
+            "include_hidden": include_hidden,
+            "encoding": encoding,
+            "max_levels": max_levels,
+            "create_dirs": create_dirs,
+            "strict_contains": strict_contains,
         }
 
         # Store encoding
@@ -177,13 +177,13 @@ class SshFilesReader(Mapping):
             ssh_config = get_ssh_config_for_host(host)
 
             # Use values from config if not explicitly provided
-            user = user or ssh_config.get('user')
-            url = url or ssh_config.get('hostname')
-            port = port if port != 22 else int(ssh_config.get('port', 22))
+            user = user or ssh_config.get("user")
+            url = url or ssh_config.get("hostname")
+            port = port if port != 22 else int(ssh_config.get("port", 22))
 
             # Try to use identity file from config if no key specified
-            if not key_filename and 'identityfile' in ssh_config:
-                key_filename = ssh_config['identityfile'][0]
+            if not key_filename and "identityfile" in ssh_config:
+                key_filename = ssh_config["identityfile"][0]
 
         # Expand key filename if provided
         if key_filename:
@@ -231,18 +231,18 @@ class SshFilesReader(Mapping):
         except IOError:
             return False
 
-    def _list_directory(self, path='.'):
+    def _list_directory(self, path="."):
         """List files and directories in the specified path"""
         try:
             entries = self._sftp.listdir(path)
             if not self._include_hidden:
-                entries = [e for e in entries if not e.startswith('.')]
+                entries = [e for e in entries if not e.startswith(".")]
             return entries
         except Exception as e:
             print(f"Warning: Error listing directory {path}: {e}")
             return []
 
-    def _walk_directory(self, path='.', current_level=0, max_levels=None):
+    def _walk_directory(self, path=".", current_level=0, max_levels=None):
         """
         Recursively walk a directory and yield entries with their paths.
 
@@ -261,7 +261,7 @@ class SshFilesReader(Mapping):
             entries = self._list_directory(path)
 
             for entry in entries:
-                entry_path = f"{path}/{entry}" if path != '.' else entry
+                entry_path = f"{path}/{entry}" if path != "." else entry
                 is_dir = self._is_dir(entry_path)
 
                 # Yield the current entry
@@ -299,7 +299,7 @@ class SshFilesReader(Mapping):
         if not normalized_path:
             return True
 
-        depth = normalized_path.count('/')
+        depth = normalized_path.count("/")
 
         if depth > self._max_levels:
             raise KeyError(
@@ -319,7 +319,7 @@ class SshFilesReader(Mapping):
         self._check_path_depth(path)
 
         # If the key contains slashes, it might be a nested path
-        if '/' in path:
+        if "/" in path:
             dir_part, file_part = split_path(path)
 
             # Check if directory part exists
@@ -337,7 +337,7 @@ class SshFilesReader(Mapping):
                 else:
                     new_rootdir = (
                         f"{self._rootdir}/{path}"
-                        if not self._rootdir.endswith('/')
+                        if not self._rootdir.endswith("/")
                         else f"{self._rootdir}{path}"
                     )
 
@@ -347,7 +347,7 @@ class SshFilesReader(Mapping):
 
             # Try to open as a file
             try:
-                with self._sftp.file(path, 'rb') as f:
+                with self._sftp.file(path, "rb") as f:
                     content = f.read()
                     # If encoding is specified, decode the bytes to string
                     if self._encoding is not None:
@@ -367,7 +367,7 @@ class SshFilesReader(Mapping):
             else:
                 new_rootdir = (
                     f"{self._rootdir}/{path}"
-                    if not self._rootdir.endswith('/')
+                    if not self._rootdir.endswith("/")
                     else f"{self._rootdir}{path}"
                 )
 
@@ -377,7 +377,7 @@ class SshFilesReader(Mapping):
 
         # If it's a file, return its contents
         try:
-            with self._sftp.file(path, 'rb') as f:
+            with self._sftp.file(path, "rb") as f:
                 content = f.read()
                 # If encoding is specified, decode the bytes to string
                 if self._encoding is not None:
@@ -395,7 +395,7 @@ class SshFilesReader(Mapping):
 
         if max_levels == 0:
             # If max_levels is 0, just list the current directory
-            entries = self._list_directory('.')
+            entries = self._list_directory(".")
             for entry in entries:
                 if self._is_dir(entry):
                     yield f"{entry}/"
@@ -404,9 +404,9 @@ class SshFilesReader(Mapping):
         else:
             # For recursive listing, use _walk_directory
             seen = set()  # To prevent duplicates
-            for path, is_dir in self._walk_directory('.', 0, max_levels):
+            for path, is_dir in self._walk_directory(".", 0, max_levels):
                 # Skip the current directory (.)
-                if path == '.':
+                if path == ".":
                     continue
 
                 # Add a trailing slash to directories
@@ -437,7 +437,7 @@ class SshFilesReader(Mapping):
         path = normalize_path(k)
 
         # Check if path exceeds allowed depth
-        if self._max_levels is not None and path.count('/') > self._max_levels:
+        if self._max_levels is not None and path.count("/") > self._max_levels:
             if self._strict_contains:
                 # In strict mode, raise error for paths beyond max_levels
                 self._check_path_depth(path)  # This will raise the appropriate KeyError
@@ -451,9 +451,9 @@ class SshFilesReader(Mapping):
     def __del__(self):
         """Close the SSH connection when the object is deleted"""
         try:
-            if hasattr(self, '_sftp'):
+            if hasattr(self, "_sftp"):
                 self._sftp.close()
-            if hasattr(self, '_ssh'):
+            if hasattr(self, "_ssh"):
                 self._ssh.close()
         except:
             pass
@@ -491,7 +491,7 @@ class SshFiles(SshFilesReader, MutableMapping):
         Raises:
             KeyError: If directory cannot be created
         """
-        if not dir_path or dir_path == '.':
+        if not dir_path or dir_path == ".":
             return True
 
         # Check if directory already exists
@@ -545,14 +545,14 @@ class SshFiles(SshFilesReader, MutableMapping):
                 raise TypeError("When encoding is None, value must be bytes")
 
         # If the key contains slashes, ensure parent directories exist
-        if '/' in path:
+        if "/" in path:
             dir_part, _ = split_path(path)
             if dir_part:
                 self._ensure_directory_exists(dir_part)
 
         # Write the file
         try:
-            with self._sftp.file(path, 'wb') as f:
+            with self._sftp.file(path, "wb") as f:
                 f.write(v)
         except Exception as e:
             raise KeyError(f"Error writing to file {k}: {str(e)}")
@@ -621,7 +621,7 @@ class SshFiles(SshFilesReader, MutableMapping):
 
 
 # Default encoding for text files (which can be edited in place to change SshTextFiles default encoding)
-DFLT_ENCODING_FOR_TEXT_FILES = 'utf-8'
+DFLT_ENCODING_FOR_TEXT_FILES = "utf-8"
 
 
 # Convenience classes for text files, to avoid having to specify the encoding in
