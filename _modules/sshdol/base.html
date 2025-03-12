@@ -1,0 +1,773 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>sshdol.base &mdash; sshdol 0.0.3 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css?v=76b2166b" />
+      <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=4ae1632d" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=47de8214"></script>
+      <script src="../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../../_static/toggleprompt.js?v=d7ede5d2"></script>
+      <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../../_static/copybutton.js?v=f281be69"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            sshdol
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../module_docs/sshdol.html">sshdol</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../module_docs/sshdol/base.html">sshdol.base</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">sshdol</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">sshdol.base</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for sshdol.base</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Base functionality for sshdol.</span>
+
+<span class="sd">|        | read-only          | read-write         |</span>
+<span class="sd">| :----- | :----------------- | :----------------- |</span>
+<span class="sd">| bytes  | SshFilesReader     | SshFiles           |</span>
+<span class="sd">| text   | SshTextFilesReader | SshTextFiles       |</span>
+
+<span class="sd">Design notes:</span>
+
+<span class="sd">* A hybrid bytes &amp; text store? See https://github.com/i2mint/dol/discussions/53#discussioncomment-12460364</span>
+
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">MutableMapping</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">stat</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">paramiko</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">functools</span><span class="w"> </span><span class="kn">import</span> <span class="n">lru_cache</span>
+
+<span class="n">places_to_look_for_default_key</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;~/.ssh/id_rsa&#39;</span><span class="p">,</span> <span class="s1">&#39;~/.ssh/id_ed25519&#39;</span><span class="p">]</span>
+
+
+<div class="viewcode-block" id="get_ssh_config_for_host">
+<a class="viewcode-back" href="../../module_docs/sshdol/base.html#sshdol.base.get_ssh_config_for_host">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_ssh_config_for_host</span><span class="p">(</span><span class="n">host</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Get SSH configuration for a specific host from the SSH config file.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        host: The host alias to look up</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        dict: Dictionary with SSH configuration parameters</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">ssh_config_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">expanduser</span><span class="p">(</span><span class="s2">&quot;~/.ssh/config&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">ssh_config_path</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{}</span>
+
+    <span class="n">config</span> <span class="o">=</span> <span class="n">paramiko</span><span class="o">.</span><span class="n">SSHConfig</span><span class="p">()</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">ssh_config_path</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">config</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">config</span><span class="o">.</span><span class="n">lookup</span><span class="p">(</span><span class="n">host</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="normalize_path">
+<a class="viewcode-back" href="../../module_docs/sshdol/base.html#sshdol.base.normalize_path">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">normalize_path</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Normalize a path to use forward slashes and handle trailing slashes.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        path: Path to normalize</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Normalized path</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Handle empty paths and root directory</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">path</span> <span class="ow">or</span> <span class="n">path</span> <span class="o">==</span> <span class="s1">&#39;.&#39;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s1">&#39;&#39;</span>
+
+    <span class="c1"># Remove trailing slash if present</span>
+    <span class="n">path</span> <span class="o">=</span> <span class="n">path</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="k">if</span> <span class="n">path</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s1">&#39;/&#39;</span><span class="p">)</span> <span class="k">else</span> <span class="n">path</span>
+
+    <span class="c1"># Normalize path separators to forward slashes</span>
+    <span class="k">return</span> <span class="n">path</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\\</span><span class="s1">&#39;</span><span class="p">,</span> <span class="s1">&#39;/&#39;</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="split_path">
+<a class="viewcode-back" href="../../module_docs/sshdol/base.html#sshdol.base.split_path">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">split_path</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Split a path into directory and file parts.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        path: Path to split</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Tuple of (directory_part, file_part)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">path</span> <span class="o">=</span> <span class="n">normalize_path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="s1">&#39;/&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">path</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">path</span>
+
+    <span class="n">parts</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;/&#39;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="s1">&#39;/&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">parts</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]),</span> <span class="n">parts</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span></div>
+
+
+
+<div class="viewcode-block" id="SshFilesReader">
+<a class="viewcode-back" href="../../module_docs/sshdol/base.html#sshdol.base.SshFilesReader">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SshFilesReader</span><span class="p">(</span><span class="n">Mapping</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Read-only interface to files on a remote SSH server.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        # Connect using an SSH config alias</span>
+<span class="sd">        &gt;&gt;&gt; s = SshFilesReader(host=&quot;myserver&quot;)  # doctest: +SKIP</span>
+
+<span class="sd">        # Connect with explicit parameters</span>
+<span class="sd">        &gt;&gt;&gt; s = SshFilesReader(user=&quot;username&quot;, url=&quot;example.com&quot;)  # doctest: +SKIP</span>
+
+<span class="sd">        # Access nested files with path-based keys</span>
+<span class="sd">        &gt;&gt;&gt; s = SshFilesReader(host=&quot;myserver&quot;, max_levels=None)  # doctest: +SKIP</span>
+<span class="sd">        &gt;&gt;&gt; content = s[&quot;path/to/nested/file.txt&quot;]  # doctest: +SKIP</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">__default_encoding</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">host</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">user</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">password</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">url</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">port</span><span class="o">=</span><span class="mi">22</span><span class="p">,</span>
+        <span class="n">key_filename</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">rootdir</span><span class="o">=</span><span class="s2">&quot;.&quot;</span><span class="p">,</span>
+        <span class="n">include_hidden</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">encoding</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">max_levels</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">create_dirs</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>  <span class="c1"># Only relevant for writable stores</span>
+        <span class="n">strict_contains</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>  <span class="c1"># Whether to raise KeyError or return False for deep paths in __contains__</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initialize an SSH connection with read-only file access.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            host: SSH alias from config file (if provided, can auto-detect other params)</span>
+<span class="sd">            user: SSH username</span>
+<span class="sd">            password: SSH password (if not using key-based auth)</span>
+<span class="sd">            url: Server hostname or IP address</span>
+<span class="sd">            port: SSH port</span>
+<span class="sd">            key_filename: Path to SSH private key file</span>
+<span class="sd">            rootdir: Base directory to use on the server</span>
+<span class="sd">            include_hidden: Whether to include hidden files in iterations</span>
+<span class="sd">            encoding: Text encoding to use (None means use bytes)</span>
+<span class="sd">            max_levels: Maximum directory depth for recursive operations:</span>
+<span class="sd">                       0 = current directory only (default)</span>
+<span class="sd">                       n = n levels of subdirectories</span>
+<span class="sd">                       None = unlimited depth</span>
+<span class="sd">                       (Design notes: https://github.com/i2mint/sshdol/issues/1#issue-2910364290)</span>
+<span class="sd">            create_dirs: Whether to create missing directories on write</span>
+<span class="sd">                       (only relevant for writable stores)</span>
+<span class="sd">            strict_contains: If True, __contains__ will raise KeyError for paths beyond max_levels</span>
+<span class="sd">                            If False (default), it will return False for such paths</span>
+<span class="sd">                            Design notes: https://github.com/i2mint/sshdol/issues/1#issuecomment-2714508482</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Store initialization parameters</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_init_params</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s1">&#39;host&#39;</span><span class="p">:</span> <span class="n">host</span><span class="p">,</span>
+            <span class="s1">&#39;user&#39;</span><span class="p">:</span> <span class="n">user</span><span class="p">,</span>
+            <span class="s1">&#39;password&#39;</span><span class="p">:</span> <span class="n">password</span><span class="p">,</span>
+            <span class="s1">&#39;url&#39;</span><span class="p">:</span> <span class="n">url</span><span class="p">,</span>
+            <span class="s1">&#39;port&#39;</span><span class="p">:</span> <span class="n">port</span><span class="p">,</span>
+            <span class="s1">&#39;key_filename&#39;</span><span class="p">:</span> <span class="n">key_filename</span><span class="p">,</span>
+            <span class="s1">&#39;include_hidden&#39;</span><span class="p">:</span> <span class="n">include_hidden</span><span class="p">,</span>
+            <span class="s1">&#39;encoding&#39;</span><span class="p">:</span> <span class="n">encoding</span><span class="p">,</span>
+            <span class="s1">&#39;max_levels&#39;</span><span class="p">:</span> <span class="n">max_levels</span><span class="p">,</span>
+            <span class="s1">&#39;create_dirs&#39;</span><span class="p">:</span> <span class="n">create_dirs</span><span class="p">,</span>
+            <span class="s1">&#39;strict_contains&#39;</span><span class="p">:</span> <span class="n">strict_contains</span><span class="p">,</span>
+        <span class="p">}</span>
+
+        <span class="c1"># Store encoding</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_encoding</span> <span class="o">=</span> <span class="n">encoding</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">__default_encoding</span>
+        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">_encoding</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="nb">isinstance</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_encoding</span><span class="p">,</span> <span class="nb">str</span>
+        <span class="p">),</span> <span class="s2">&quot;Encoding must be a string&quot;</span>
+
+        <span class="c1"># Store recursion parameters</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_max_levels</span> <span class="o">=</span> <span class="n">max_levels</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_create_dirs</span> <span class="o">=</span> <span class="n">create_dirs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_strict_contains</span> <span class="o">=</span> <span class="n">strict_contains</span>
+
+        <span class="c1"># Initialize the SSH connection</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ssh</span> <span class="o">=</span> <span class="n">paramiko</span><span class="o">.</span><span class="n">SSHClient</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ssh</span><span class="o">.</span><span class="n">set_missing_host_key_policy</span><span class="p">(</span><span class="n">paramiko</span><span class="o">.</span><span class="n">AutoAddPolicy</span><span class="p">())</span>
+
+        <span class="c1"># If a host alias is provided, try to get config from SSH config file</span>
+        <span class="k">if</span> <span class="n">host</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">([</span><span class="n">user</span><span class="p">,</span> <span class="n">url</span><span class="p">]):</span>
+            <span class="n">ssh_config</span> <span class="o">=</span> <span class="n">get_ssh_config_for_host</span><span class="p">(</span><span class="n">host</span><span class="p">)</span>
+
+            <span class="c1"># Use values from config if not explicitly provided</span>
+            <span class="n">user</span> <span class="o">=</span> <span class="n">user</span> <span class="ow">or</span> <span class="n">ssh_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;user&#39;</span><span class="p">)</span>
+            <span class="n">url</span> <span class="o">=</span> <span class="n">url</span> <span class="ow">or</span> <span class="n">ssh_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;hostname&#39;</span><span class="p">)</span>
+            <span class="n">port</span> <span class="o">=</span> <span class="n">port</span> <span class="k">if</span> <span class="n">port</span> <span class="o">!=</span> <span class="mi">22</span> <span class="k">else</span> <span class="nb">int</span><span class="p">(</span><span class="n">ssh_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;port&#39;</span><span class="p">,</span> <span class="mi">22</span><span class="p">))</span>
+
+            <span class="c1"># Try to use identity file from config if no key specified</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">key_filename</span> <span class="ow">and</span> <span class="s1">&#39;identityfile&#39;</span> <span class="ow">in</span> <span class="n">ssh_config</span><span class="p">:</span>
+                <span class="n">key_filename</span> <span class="o">=</span> <span class="n">ssh_config</span><span class="p">[</span><span class="s1">&#39;identityfile&#39;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="c1"># Expand key filename if provided</span>
+        <span class="k">if</span> <span class="n">key_filename</span><span class="p">:</span>
+            <span class="n">key_filename</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">expanduser</span><span class="p">(</span><span class="n">key_filename</span><span class="p">)</span>
+
+        <span class="c1"># Default identity files if nothing specified</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">password</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">key_filename</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">default_key</span> <span class="ow">in</span> <span class="n">places_to_look_for_default_key</span><span class="p">:</span>
+                <span class="n">expanded_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">expanduser</span><span class="p">(</span><span class="n">default_key</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">expanded_path</span><span class="p">):</span>
+                    <span class="n">key_filename</span> <span class="o">=</span> <span class="n">expanded_path</span>
+                    <span class="k">break</span>
+
+        <span class="c1"># Connect using appropriate authentication method</span>
+        <span class="k">if</span> <span class="n">key_filename</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_ssh</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="n">port</span><span class="p">,</span> <span class="n">username</span><span class="o">=</span><span class="n">user</span><span class="p">,</span> <span class="n">key_filename</span><span class="o">=</span><span class="n">key_filename</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_ssh</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="n">port</span><span class="p">,</span> <span class="n">username</span><span class="o">=</span><span class="n">user</span><span class="p">,</span> <span class="n">password</span><span class="o">=</span><span class="n">password</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sftp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ssh</span><span class="o">.</span><span class="n">open_sftp</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rootdir</span> <span class="o">=</span> <span class="n">rootdir</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_include_hidden</span> <span class="o">=</span> <span class="n">include_hidden</span>
+
+        <span class="c1"># Change to root directory if it&#39;s not the default</span>
+        <span class="k">if</span> <span class="n">rootdir</span> <span class="o">!=</span> <span class="s2">&quot;.&quot;</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_sftp</span><span class="o">.</span><span class="n">chdir</span><span class="p">(</span><span class="n">rootdir</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">IOError</span><span class="p">:</span>
+                <span class="c1"># If directory doesn&#39;t exist, don&#39;t error - it will be handled by operations</span>
+                <span class="k">pass</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_is_dir</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if a path is a directory&quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">attr</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sftp</span><span class="o">.</span><span class="n">stat</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">stat</span><span class="o">.</span><span class="n">S_ISDIR</span><span class="p">(</span><span class="n">attr</span><span class="o">.</span><span class="n">st_mode</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">IOError</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_path_exists</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if a path exists&quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_sftp</span><span class="o">.</span><span class="n">stat</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">True</span>
+        <span class="k">except</span> <span class="ne">IOError</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_list_directory</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="s1">&#39;.&#39;</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;List files and directories in the specified path&quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">entries</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sftp</span><span class="o">.</span><span class="n">listdir</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_include_hidden</span><span class="p">:</span>
+                <span class="n">entries</span> <span class="o">=</span> <span class="p">[</span><span class="n">e</span> <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">entries</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">e</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">)]</span>
+            <span class="k">return</span> <span class="n">entries</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Warning: Error listing directory </span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="p">[]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_walk_directory</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="s1">&#39;.&#39;</span><span class="p">,</span> <span class="n">current_level</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">max_levels</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Recursively walk a directory and yield entries with their paths.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            path: Current directory path</span>
+<span class="sd">            current_level: Current recursion level</span>
+<span class="sd">            max_levels: Maximum recursion depth (None for unlimited)</span>
+
+<span class="sd">        Yields:</span>
+<span class="sd">            tuple: (path, is_dir) for each entry</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">max_levels</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">current_level</span> <span class="o">&gt;</span> <span class="n">max_levels</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">entries</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_list_directory</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+
+            <span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">entries</span><span class="p">:</span>
+                <span class="n">entry_path</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">entry</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">if</span> <span class="n">path</span> <span class="o">!=</span> <span class="s1">&#39;.&#39;</span> <span class="k">else</span> <span class="n">entry</span>
+                <span class="n">is_dir</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_dir</span><span class="p">(</span><span class="n">entry_path</span><span class="p">)</span>
+
+                <span class="c1"># Yield the current entry</span>
+                <span class="k">yield</span> <span class="n">entry_path</span><span class="p">,</span> <span class="n">is_dir</span>
+
+                <span class="c1"># If it&#39;s a directory and we&#39;re not at max depth, recurse</span>
+                <span class="k">if</span> <span class="n">is_dir</span> <span class="ow">and</span> <span class="p">(</span><span class="n">max_levels</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">current_level</span> <span class="o">&lt;</span> <span class="n">max_levels</span><span class="p">):</span>
+                    <span class="k">yield from</span> <span class="bp">self</span><span class="o">.</span><span class="n">_walk_directory</span><span class="p">(</span>
+                        <span class="n">entry_path</span><span class="p">,</span> <span class="n">current_level</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">max_levels</span>
+                    <span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Warning: Error walking directory </span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_path_depth</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Check if path exceeds maximum allowed depth.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            path: Path to check</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            bool: True if path is within allowed depth, False otherwise</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            KeyError: If path exceeds max_levels</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_max_levels</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># No depth restriction</span>
+            <span class="k">return</span> <span class="kc">True</span>
+
+        <span class="c1"># Count the number of directory separators to determine depth</span>
+        <span class="n">normalized_path</span> <span class="o">=</span> <span class="n">normalize_path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+
+        <span class="c1"># Skip empty paths</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">normalized_path</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">True</span>
+
+        <span class="n">depth</span> <span class="o">=</span> <span class="n">normalized_path</span><span class="o">.</span><span class="n">count</span><span class="p">(</span><span class="s1">&#39;/&#39;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">depth</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">_max_levels</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Path depth (</span><span class="si">{</span><span class="n">depth</span><span class="si">}</span><span class="s2">) exceeds maximum allowed depth (</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_max_levels</span><span class="si">}</span><span class="s2">): </span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="kc">True</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">k</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get contents of a file or return a new instance for directories.</span>
+<span class="sd">        Supports path-based keys with slashes for nested files.</span>
+<span class="sd">        Respects max_levels constraint for reading.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="n">normalize_path</span><span class="p">(</span><span class="n">k</span><span class="p">)</span>
+
+        <span class="c1"># Check if path exceeds allowed depth</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check_path_depth</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+
+        <span class="c1"># If the key contains slashes, it might be a nested path</span>
+        <span class="k">if</span> <span class="s1">&#39;/&#39;</span> <span class="ow">in</span> <span class="n">path</span><span class="p">:</span>
+            <span class="n">dir_part</span><span class="p">,</span> <span class="n">file_part</span> <span class="o">=</span> <span class="n">split_path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+
+            <span class="c1"># Check if directory part exists</span>
+            <span class="k">if</span> <span class="n">dir_part</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_path_exists</span><span class="p">(</span><span class="n">dir_part</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Directory part does not exist: </span><span class="si">{</span><span class="n">dir_part</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+            <span class="c1"># Check if the whole path is a directory</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_dir</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
+                <span class="c1"># Create a new instance for this subdirectory</span>
+                <span class="n">params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_init_params</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+                <span class="c1"># Create new path by joining current rootdir with the key</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rootdir</span> <span class="o">==</span> <span class="s2">&quot;.&quot;</span><span class="p">:</span>
+                    <span class="n">new_rootdir</span> <span class="o">=</span> <span class="n">path</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">new_rootdir</span> <span class="o">=</span> <span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_rootdir</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">&quot;</span>
+                        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rootdir</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s1">&#39;/&#39;</span><span class="p">)</span>
+                        <span class="k">else</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_rootdir</span><span class="si">}{</span><span class="n">path</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
+
+                <span class="c1"># Create a completely new connection for the subdirectory</span>
+                <span class="n">new_instance</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)(</span><span class="o">**</span><span class="n">params</span><span class="p">,</span> <span class="n">rootdir</span><span class="o">=</span><span class="n">new_rootdir</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">new_instance</span>
+
+            <span class="c1"># Try to open as a file</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sftp</span><span class="o">.</span><span class="n">file</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="s1">&#39;rb&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                    <span class="n">content</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+                    <span class="c1"># If encoding is specified, decode the bytes to string</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_encoding</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="n">content</span> <span class="o">=</span> <span class="n">content</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_encoding</span><span class="p">)</span>
+                    <span class="k">return</span> <span class="n">content</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error reading file </span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Handle direct directory or file access (no slashes)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_dir</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
+            <span class="c1"># Create a new instance for this subdirectory</span>
+            <span class="n">params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_init_params</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+            <span class="c1"># Create new path by joining current rootdir with the key</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rootdir</span> <span class="o">==</span> <span class="s2">&quot;.&quot;</span><span class="p">:</span>
+                <span class="n">new_rootdir</span> <span class="o">=</span> <span class="n">path</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">new_rootdir</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_rootdir</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rootdir</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s1">&#39;/&#39;</span><span class="p">)</span>
+                    <span class="k">else</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_rootdir</span><span class="si">}{</span><span class="n">path</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+
+            <span class="c1"># Create a completely new connection for the subdirectory</span>
+            <span class="n">new_instance</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)(</span><span class="o">**</span><span class="n">params</span><span class="p">,</span> <span class="n">rootdir</span><span class="o">=</span><span class="n">new_rootdir</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">new_instance</span>
+
+        <span class="c1"># If it&#39;s a file, return its contents</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sftp</span><span class="o">.</span><span class="n">file</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="s1">&#39;rb&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                <span class="n">content</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+                <span class="c1"># If encoding is specified, decode the bytes to string</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_encoding</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">content</span> <span class="o">=</span> <span class="n">content</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_encoding</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">content</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error reading file </span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Iterate over files and subdirectories recursively based on max_levels.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Use the current object&#39;s max_levels</span>
+        <span class="n">max_levels</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_max_levels</span>
+
+        <span class="k">if</span> <span class="n">max_levels</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="c1"># If max_levels is 0, just list the current directory</span>
+            <span class="n">entries</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_list_directory</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">entries</span><span class="p">:</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_dir</span><span class="p">(</span><span class="n">entry</span><span class="p">):</span>
+                    <span class="k">yield</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">entry</span><span class="si">}</span><span class="s2">/&quot;</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">yield</span> <span class="n">entry</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># For recursive listing, use _walk_directory</span>
+            <span class="n">seen</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>  <span class="c1"># To prevent duplicates</span>
+            <span class="k">for</span> <span class="n">path</span><span class="p">,</span> <span class="n">is_dir</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_walk_directory</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">max_levels</span><span class="p">):</span>
+                <span class="c1"># Skip the current directory (.)</span>
+                <span class="k">if</span> <span class="n">path</span> <span class="o">==</span> <span class="s1">&#39;.&#39;</span><span class="p">:</span>
+                    <span class="k">continue</span>
+
+                <span class="c1"># Add a trailing slash to directories</span>
+                <span class="k">if</span> <span class="n">is_dir</span><span class="p">:</span>
+                    <span class="n">path</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">/&quot;</span>
+
+                <span class="k">if</span> <span class="n">path</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">seen</span><span class="p">:</span>
+                    <span class="n">seen</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+                    <span class="k">yield</span> <span class="n">path</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Return the number of entries up to max_levels deep.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">count</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="bp">self</span><span class="p">:</span>
+            <span class="n">count</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="k">return</span> <span class="n">count</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__contains__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">k</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Check if a file or directory exists.</span>
+<span class="sd">        Supports path-based keys with slashes for nested files.</span>
+<span class="sd">        Respects max_levels constraint based on strict_contains setting.</span>
+
+<span class="sd">        See https://github.com/i2mint/sshdol/issues/1#issuecomment-2714508482</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="n">normalize_path</span><span class="p">(</span><span class="n">k</span><span class="p">)</span>
+
+        <span class="c1"># Check if path exceeds allowed depth</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_max_levels</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">path</span><span class="o">.</span><span class="n">count</span><span class="p">(</span><span class="s1">&#39;/&#39;</span><span class="p">)</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">_max_levels</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_strict_contains</span><span class="p">:</span>
+                <span class="c1"># In strict mode, raise error for paths beyond max_levels</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_check_path_depth</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>  <span class="c1"># This will raise the appropriate KeyError</span>
+
+            <span class="c1"># In non-strict mode, just return False for paths beyond max_levels</span>
+            <span class="k">return</span> <span class="kc">False</span>
+
+        <span class="c1"># For direct contains check, we can just check existence</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_path_exists</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__del__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Close the SSH connection when the object is deleted&quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;_sftp&#39;</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_sftp</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;_ssh&#39;</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_ssh</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="k">pass</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;String representation of the object&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">(rootdir=&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_rootdir</span><span class="si">}</span><span class="s2">&#39;)&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="SshFiles">
+<a class="viewcode-back" href="../../module_docs/sshdol/base.html#sshdol.base.SshFiles">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SshFiles</span><span class="p">(</span><span class="n">SshFilesReader</span><span class="p">,</span> <span class="n">MutableMapping</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Read-write interface to files on a remote SSH server.</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; s = SshFiles(host=&quot;myserver&quot;)  # doctest: +SKIP</span>
+<span class="sd">        &gt;&gt;&gt; s[&#39;file.txt&#39;] = b&#39;Hello, world!&#39;  # doctest: +SKIP</span>
+<span class="sd">        &gt;&gt;&gt; s = SshFiles(host=&quot;myserver&quot;, encoding=&quot;utf-8&quot;)  # doctest: +SKIP</span>
+<span class="sd">        &gt;&gt;&gt; s[&#39;file.txt&#39;] = &#39;Hello, world!&#39;  # doctest: +SKIP</span>
+
+<span class="sd">        # Write to nested paths with directory creation</span>
+<span class="sd">        &gt;&gt;&gt; s = SshFiles(host=&quot;myserver&quot;, create_dirs=True)  # doctest: +SKIP</span>
+<span class="sd">        &gt;&gt;&gt; s[&#39;dir1/dir2/file.txt&#39;] = b&#39;Nested content&#39;  # doctest: +SKIP</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_ensure_directory_exists</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dir_path</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Ensure a directory exists, creating it if necessary.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            dir_path: Directory path to ensure</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            bool: True if successful</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            KeyError: If directory cannot be created</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">dir_path</span> <span class="ow">or</span> <span class="n">dir_path</span> <span class="o">==</span> <span class="s1">&#39;.&#39;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">True</span>
+
+        <span class="c1"># Check if directory already exists</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_sftp</span><span class="o">.</span><span class="n">stat</span><span class="p">(</span><span class="n">dir_path</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_dir</span><span class="p">(</span><span class="n">dir_path</span><span class="p">):</span>
+                <span class="k">return</span> <span class="kc">True</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Path exists but is not a directory: </span><span class="si">{</span><span class="n">dir_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">IOError</span><span class="p">:</span>
+            <span class="c1"># Directory doesn&#39;t exist, create it if allowed</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_create_dirs</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Directory does not exist and create_dirs=False: </span><span class="si">{</span><span class="n">dir_path</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+
+            <span class="c1"># Create parent directories recursively</span>
+            <span class="n">parent_dir</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">split_path</span><span class="p">(</span><span class="n">dir_path</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">parent_dir</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_directory_exists</span><span class="p">(</span><span class="n">parent_dir</span><span class="p">)</span>
+
+            <span class="c1"># Create the directory</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_sftp</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">dir_path</span><span class="p">)</span>
+                <span class="k">return</span> <span class="kc">True</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to create directory </span><span class="si">{</span><span class="n">dir_path</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__setitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Write data to a file on the SSH server.</span>
+<span class="sd">        Supports path-based keys with slashes for nested files.</span>
+<span class="sd">        Respects max_levels constraint for writing.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Check if path exceeds allowed depth</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="n">normalize_path</span><span class="p">(</span><span class="n">k</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check_path_depth</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+
+        <span class="c1"># Handle encoding based on the _encoding attribute</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_encoding</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># When encoding is set, user should provide strings that we then encode</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                <span class="n">v</span> <span class="o">=</span> <span class="n">v</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_encoding</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;When encoding is set to &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_encoding</span><span class="si">}</span><span class="s2">&#39;, value must be a string&quot;</span>
+                <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># When no encoding is set, user should provide bytes directly</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">bytes</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;When encoding is None, value must be bytes&quot;</span><span class="p">)</span>
+
+        <span class="c1"># If the key contains slashes, ensure parent directories exist</span>
+        <span class="k">if</span> <span class="s1">&#39;/&#39;</span> <span class="ow">in</span> <span class="n">path</span><span class="p">:</span>
+            <span class="n">dir_part</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">split_path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">dir_part</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_directory_exists</span><span class="p">(</span><span class="n">dir_part</span><span class="p">)</span>
+
+        <span class="c1"># Write the file</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sftp</span><span class="o">.</span><span class="n">file</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="s1">&#39;wb&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error writing to file </span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__delitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">k</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Delete a file on the SSH server.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="n">normalize_path</span><span class="p">(</span><span class="n">k</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_path_exists</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="n">k</span><span class="p">)</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># Check if it&#39;s a directory</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_dir</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
+                <span class="c1"># Check if it&#39;s empty</span>
+                <span class="n">entries</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_list_directory</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">entries</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Cannot delete non-empty directory: </span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_sftp</span><span class="o">.</span><span class="n">rmdir</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_sftp</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="ne">KeyError</span><span class="p">):</span>
+                <span class="k">raise</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error deleting </span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<div class="viewcode-block" id="SshFiles.mkdir">
+<a class="viewcode-back" href="../../module_docs/sshdol/base.html#sshdol.base.SshFiles.mkdir">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">mkdir</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Create a directory on the SSH server.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            path: Directory path to create</span>
+<span class="sd">            exist_ok: If True, don&#39;t raise an error if directory already exists</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            SshFiles: A new instance for the created directory</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            KeyError: If directory cannot be created</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="n">normalize_path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+
+        <span class="c1"># Check if directory already exists</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_path_exists</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_dir</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">exist_ok</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Directory already exists: </span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Path exists but is not a directory: </span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Create parent directories recursively</span>
+            <span class="n">dir_part</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">split_path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">dir_part</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_directory_exists</span><span class="p">(</span><span class="n">dir_part</span><span class="p">)</span>
+
+            <span class="c1"># Create the directory</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_sftp</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to create directory </span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Return a new instance for the created directory</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="p">[</span><span class="n">path</span><span class="p">]</span></div>
+</div>
+
+
+
+<span class="c1"># Default encoding for text files (which can be edited in place to change SshTextFiles default encoding)</span>
+<span class="n">DFLT_ENCODING_FOR_TEXT_FILES</span> <span class="o">=</span> <span class="s1">&#39;utf-8&#39;</span>
+
+
+<span class="c1"># Convenience classes for text files, to avoid having to specify the encoding in</span>
+<span class="c1"># SshFiles to get a text file interface</span>
+<div class="viewcode-block" id="SshTextFilesReader">
+<a class="viewcode-back" href="../../module_docs/sshdol/base.html#sshdol.base.SshTextFilesReader">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SshTextFilesReader</span><span class="p">(</span><span class="n">SshFilesReader</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Read-only interface to text files on a remote SSH server.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">__default_encoding</span> <span class="o">=</span> <span class="n">DFLT_ENCODING_FOR_TEXT_FILES</span></div>
+
+
+
+<div class="viewcode-block" id="SshTextFiles">
+<a class="viewcode-back" href="../../module_docs/sshdol/base.html#sshdol.base.SshTextFiles">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SshTextFiles</span><span class="p">(</span><span class="n">SshFiles</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Read-write interface to text files on a remote SSH server.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">__default_encoding</span> <span class="o">=</span> <span class="n">DFLT_ENCODING_FOR_TEXT_FILES</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright NO COPYRIGHT.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
