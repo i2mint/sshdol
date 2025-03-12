@@ -1,5 +1,5 @@
 {
-    "MAX_TEST_KEYS": 5,
-    "SSH_TEST_HOST": "thorwhalen",
-    "SSH_TEST_ROOTDIR": "/root/data/tests/sshdol"
+    "MAX_TEST_KEYS": 20,
+    "SSH_TEST_HOST": "sshdol_server",
+    "SSH_TEST_ROOTDIR": "/home/sshdol_ci/sshdol_ci_tests"
 }

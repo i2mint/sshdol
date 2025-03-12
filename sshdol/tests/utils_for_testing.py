@@ -30,7 +30,7 @@ def _is_the_test_folder(store):
     A function that checks if the store is the test folder.
     The raison d'être of this function is to not mistakingly empty the wrong store.
     """
-    return store._rootdir == "/root/data/tests/sshdol"
+    return store._rootdir == "/home/sshdol_ci/sshdol_ci_tests"
 
 
 def _keys_as_expected(keys, max_keys=MAX_TEST_KEYS):
@@ -53,8 +53,8 @@ def empty_test_store(
     # so that the error message is more informative, and the function is more efficient
     # (don't need to fetch the keys twice)
     if store_as_expected(store):
-        # Note: We're sorting the keys in reverse order, so that we don't run into the 
-        # "can't delete non-empty folder" problem. 
+        # Note: We're sorting the keys in reverse order, so that we don't run into the
+        # "can't delete non-empty folder" problem.
         keys = sorted(_first_n_keys_and_bust_if_more(store), reverse=True)
         if keys_as_expected(keys):
             for k in keys:

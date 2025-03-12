@@ -37,6 +37,13 @@ jobs:
       - name: Set SSH Key Permissions
         run: chmod 600 ~/.ssh/sshdol_ci_key
 
+      - name: Create SSH Config File
+        run: |
+          echo "Host sshdol_server" >> ~/.ssh/config
+          echo "  HostName 164.92.79.155" >> ~/.ssh/config
+          echo "  User sshdol_ci" >> ~/.ssh/config
+          echo "  IdentityFile ~/.ssh/sshdol_ci_key" >> ~/.ssh/config
+
       - name: Format Source Code
         uses: i2mint/isee/actions/format-source-code@master
 
@@ -52,14 +59,6 @@ jobs:
         with:
           root-dir: ${{ env.PROJECT_NAME }}
           paths-to-ignore: examples,scrap
-
-      - name: Run SSH Tests
-        run: |
-          # Example: If your tests require SSH access, you would execute them here.
-          # You might need to set environment variables with SSH connection details
-          # (e.g., SSH_HOST, SSH_USER) that your tests can read.
-          # Example test execution (replace with your actual test command):
-          pytest -v tests/test_ssh.py --ssh-host=164.92.79.155 --ssh-user=sshdol_ci --ssh-key=~/.ssh/sshdol_ci_key
 
   publish:
     name: Publish
