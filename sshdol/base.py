@@ -113,6 +113,8 @@ class SshFilesReader(Mapping):
         key_filename=None,
         rootdir=".",
         include_hidden=False,
+        include_directories=True,  # Whether to include directories in iterations
+        dir_access=True,  # Whether to allow accessing directories via __getitem__
         encoding=None,
         max_levels=0,
         create_dirs=False,  # Only relevant for writable stores
@@ -130,6 +132,8 @@ class SshFilesReader(Mapping):
             key_filename: Path to SSH private key file
             rootdir: Base directory to use on the server
             include_hidden: Whether to include hidden files in iterations
+            include_directories: Whether to include directories in iterations
+            dir_access: Whether to allow accessing directories via __getitem__
             encoding: Text encoding to use (None means use bytes)
             max_levels: Maximum directory depth for recursive operations:
                        0 = current directory only (default)
@@ -151,22 +155,26 @@ class SshFilesReader(Mapping):
             "port": port,
             "key_filename": key_filename,
             "include_hidden": include_hidden,
+            "include_directories": include_directories,  # Save the new parameter
+            "dir_access": dir_access,  # Save the new parameter
             "encoding": encoding,
             "max_levels": max_levels,
             "create_dirs": create_dirs,
             "strict_contains": strict_contains,
         }
 
-        # Store encoding
+        # Store configuration options
         self._encoding = encoding or self.__default_encoding
-        assert self._encoding is None or isinstance(
-            self._encoding, str
-        ), "Encoding must be a string"
-
-        # Store recursion parameters
         self._max_levels = max_levels
         self._create_dirs = create_dirs
         self._strict_contains = strict_contains
+        self._include_hidden = include_hidden
+        self._include_directories = include_directories  # Store the new parameter
+        self._dir_access = dir_access  # Store the new parameter
+
+        assert self._encoding is None or isinstance(
+            self._encoding, str
+        ), "Encoding must be a string"
 
         # Initialize the SSH connection
         self._ssh = paramiko.SSHClient()
@@ -204,8 +212,7 @@ class SshFilesReader(Mapping):
             self._ssh.connect(url, port=port, username=user, password=password)
 
         self._sftp = self._ssh.open_sftp()
-        self._rootdir = rootdir
-        self._include_hidden = include_hidden
+        self.rootdir = rootdir
 
         # Change to root directory if it's not the default
         if rootdir != ".":
@@ -318,6 +325,13 @@ class SshFilesReader(Mapping):
         # Check if path exceeds allowed depth
         self._check_path_depth(path)
 
+        # First, check if it's a directory
+        is_dir = self._is_dir(path)
+
+        # If this is a directory and dir_access is False, block access immediately
+        if is_dir and not self._dir_access:
+            raise KeyError(f"Directory access is disabled: {path}")
+
         # If the key contains slashes, it might be a nested path
         if "/" in path:
             dir_part, file_part = split_path(path)
@@ -327,18 +341,18 @@ class SshFilesReader(Mapping):
                 raise KeyError(f"Directory part does not exist: {dir_part}")
 
             # Check if the whole path is a directory
-            if self._is_dir(path):
+            if is_dir:
                 # Create a new instance for this subdirectory
                 params = self._init_params.copy()
 
                 # Create new path by joining current rootdir with the key
-                if self._rootdir == ".":
+                if self.rootdir == ".":
                     new_rootdir = path
                 else:
                     new_rootdir = (
-                        f"{self._rootdir}/{path}"
-                        if not self._rootdir.endswith("/")
-                        else f"{self._rootdir}{path}"
+                        f"{self.rootdir}/{path}"
+                        if not self.rootdir.endswith("/")
+                        else f"{self.rootdir}{path}"
                     )
 
                 # Create a completely new connection for the subdirectory
@@ -357,18 +371,18 @@ class SshFilesReader(Mapping):
                 raise KeyError(f"Error reading file {k}: {str(e)}")
 
         # Handle direct directory or file access (no slashes)
-        if self._is_dir(path):
+        if is_dir:
             # Create a new instance for this subdirectory
             params = self._init_params.copy()
 
             # Create new path by joining current rootdir with the key
-            if self._rootdir == ".":
+            if self.rootdir == ".":
                 new_rootdir = path
             else:
                 new_rootdir = (
-                    f"{self._rootdir}/{path}"
-                    if not self._rootdir.endswith("/")
-                    else f"{self._rootdir}{path}"
+                    f"{self.rootdir}/{path}"
+                    if not self.rootdir.endswith("/")
+                    else f"{self.rootdir}{path}"
                 )
 
             # Create a completely new connection for the subdirectory
@@ -389,6 +403,7 @@ class SshFilesReader(Mapping):
     def __iter__(self):
         """
         Iterate over files and subdirectories recursively based on max_levels.
+        Respects include_directories setting to control whether directories are yielded.
         """
         # Use the current object's max_levels
         max_levels = self._max_levels
@@ -398,7 +413,10 @@ class SshFilesReader(Mapping):
             entries = self._list_directory(".")
             for entry in entries:
                 if self._is_dir(entry):
-                    yield f"{entry}/"
+                    if (
+                        self._include_directories
+                    ):  # Only yield directories if include_directories is True
+                        yield f"{entry}/"
                 else:
                     yield entry
         else:
@@ -409,13 +427,20 @@ class SshFilesReader(Mapping):
                 if path == ".":
                     continue
 
-                # Add a trailing slash to directories
+                # For directories, add trailing slash and only include if include_directories is True
                 if is_dir:
-                    path = f"{path}/"
-
-                if path not in seen:
-                    seen.add(path)
-                    yield path
+                    if (
+                        self._include_directories
+                    ):  # Only yield directories if include_directories is True
+                        path_with_slash = f"{path}/"
+                        if path_with_slash not in seen:
+                            seen.add(path_with_slash)
+                            yield path_with_slash
+                else:
+                    # Always yield files
+                    if path not in seen:
+                        seen.add(path)
+                        yield path
 
     def __len__(self):
         """
@@ -460,7 +485,7 @@ class SshFilesReader(Mapping):
 
     def __repr__(self):
         """String representation of the object"""
-        return f"{self.__class__.__name__}(rootdir='{self._rootdir}')"
+        return f"{self.__class__.__name__}(rootdir='{self.rootdir}')"
 
 
 class SshFiles(SshFilesReader, MutableMapping):

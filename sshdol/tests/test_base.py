@@ -174,3 +174,87 @@ def test_recursive_functionality():
     with pytest.raises(KeyError) as excinfo:
         "level0/level1/file.txt" in s_strict  # Will now raise KeyError
     assert "Path depth (2) exceeds maximum allowed depth (1)" in str(excinfo.value)
+
+    # Test include_directories=False functionality
+    # Reuse the existing store with the deep structure
+    s_no_dirs = SshFiles(
+        host=SSH_TEST_HOST,
+        rootdir=SSH_TEST_ROOTDIR,
+        max_levels=None,
+        include_directories=False,  # Directories won't show in iteration
+    )
+
+    # Verify that we can still access the deeply nested file
+    assert s_no_dirs["level0/level1/level2/file.txt"] == b"deep file content"
+
+    # Get all keys and verify no directories are included
+    no_dirs_keys = list(s_no_dirs)
+    assert "level0/level1/level2/file.txt" in no_dirs_keys  # File is included
+    assert "level0/" not in no_dirs_keys  # Directory is not included
+    assert "level0/level1/" not in no_dirs_keys  # Nested directory not included
+    assert "level0/level1/level2/" not in no_dirs_keys  # Nested directory not included
+
+    # Verify we can still access directories through __getitem__
+    assert isinstance(s_no_dirs["level0/"], SshFiles)
+
+    # Test dir_access=False functionality
+    s_no_dir_access = SshFiles(
+        host=SSH_TEST_HOST,
+        rootdir=SSH_TEST_ROOTDIR,
+        max_levels=None,
+        dir_access=False,  # Directory access via __getitem__ is blocked
+        include_directories=True,  # But directories still show in iteration
+    )
+
+    # Verify we can still access files
+    assert s_no_dir_access["level0/level1/level2/file.txt"] == b"deep file content"
+
+    # Verify directories appear in iteration
+    no_dir_access_keys = list(s_no_dir_access)
+    assert "level0/" in no_dir_access_keys  # Directory is included
+    assert "level0/level1/level2/file.txt" in no_dir_access_keys  # File is included
+
+    # Verify we cannot access directories through __getitem__
+    with pytest.raises(KeyError) as excinfo:
+        _ = s_no_dir_access["level0/"]
+    assert "Directory access is disabled" in str(excinfo.value)
+
+    # Test combination: include_directories=False, dir_access=False
+    s_no_dirs_no_access = SshFiles(
+        host=SSH_TEST_HOST,
+        rootdir=SSH_TEST_ROOTDIR,
+        max_levels=None,
+        include_directories=False,  # Directories won't show in iteration
+        dir_access=False,  # Directory access via __getitem__ is blocked
+    )
+
+    # Verify we can still access files
+    assert s_no_dirs_no_access["level0/level1/level2/file.txt"] == b"deep file content"
+
+    # Verify no directories in iteration
+    combo_keys = list(s_no_dirs_no_access)
+    assert "level0/" not in combo_keys  # Directory not included
+    assert "level0/level1/level2/file.txt" in combo_keys  # File is included
+
+    # Verify we cannot access directories through __getitem__
+    with pytest.raises(KeyError) as excinfo:
+        _ = s_no_dirs_no_access["level0/"]
+    assert "Directory access is disabled" in str(excinfo.value)
+
+    # Test with limited depth and include_directories=False
+    s_limited_no_dirs = SshFiles(
+        host=SSH_TEST_HOST,
+        rootdir=SSH_TEST_ROOTDIR,
+        max_levels=1,  # Only one level of subdirectories
+        include_directories=False,  # Directories won't show in iteration
+    )
+
+    # Get all keys and verify we only see files up to depth 1, but no directories
+    limited_no_dirs_keys = list(s_limited_no_dirs)
+    assert "level0/" not in limited_no_dirs_keys  # Directory not included
+    assert (
+        "level0/file.txt" in limited_no_dirs_keys
+    )  # File at allowed depth is included
+    assert (
+        "level0/level1/file.txt" not in limited_no_dirs_keys
+    )  # Beyond max depth not included

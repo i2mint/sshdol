@@ -160,15 +160,26 @@ text = t['notes.txt']  # Returns 'Hello, this is a text note'
 
 ### Creating a new directory
 
-```python
-# Create a store with directory creation enabled
-s = SshFiles(host="myserver", create_dirs=True)
+Now, know that your ssh stores have a `mkdir` where you can make a directory, 
+which can then be written in:
 
+```py
 # Create a new directory
 projects_dir = s.mkdir('projects')
 
 # Write files in the new directory
 projects_dir['README.md'] = b'# Projects Directory'
+```
+
+But if you specify `create_dirs=True`, you are allowing the store to make these 
+directories automatically, at the moment you want to write in them 
+(sort of like what github and some blob storage systems do):
+
+```python
+# Create a store with directory creation enabled
+s = SshFiles(host="myserver", create_dirs=True)
+
+s['some_folder/that/did/not/exist/README.md'] = b'Write me!'
 ```
 
 ### Handling large directory structures

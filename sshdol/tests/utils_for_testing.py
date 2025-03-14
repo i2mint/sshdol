@@ -30,7 +30,7 @@ def _is_the_test_folder(store):
     A function that checks if the store is the test folder.
     The raison d'être of this function is to not mistakingly empty the wrong store.
     """
-    return store._rootdir == "/home/sshdol_ci/sshdol_ci_tests"
+    return store.rootdir == "/home/sshdol_ci/sshdol_ci_tests"
 
 
 def _keys_as_expected(keys, max_keys=MAX_TEST_KEYS):
