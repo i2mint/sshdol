@@ -13,11 +13,25 @@ Design notes:
 """
 
 from pathlib import Path
-from typing import Mapping, MutableMapping, Iterator, Any, Optional, List, Tuple, Union
+from typing import (
+    Mapping,
+    MutableMapping,
+    Iterator,
+    Any,
+    Optional,
+    List,
+    Tuple,
+    Union,
+    Literal,
+)
 import os
 import stat
+import subprocess
+import shutil
+import sys
 import paramiko
 from functools import lru_cache
+import shlex
 
 places_to_look_for_default_key = ["~/.ssh/id_rsa", "~/.ssh/id_ed25519"]
 
@@ -213,6 +227,11 @@ class SshFilesReader(Mapping):
 
         self._sftp = self._ssh.open_sftp()
         self.rootdir = rootdir
+        # Save connection details for auxiliary operations like rsync
+        self._conn_user = user
+        self._conn_host = url
+        self._conn_port = port
+        self._conn_key_filename = key_filename
 
         # Change to root directory if it's not the default
         if rootdir != ".":
@@ -231,11 +250,19 @@ class SshFilesReader(Mapping):
             return False
 
     def _path_exists(self, path):
-        """Check if a path exists"""
+        """Check if a path exists (uses a single remote exec for efficiency)."""
         try:
-            self._sftp.stat(path)
-            return True
-        except IOError:
+            # Use a remote shell to test existence relative to rootdir
+            quoted_root = shlex.quote(self.rootdir)
+            quoted_path = shlex.quote(normalize_path(path))
+            cmd = (
+                f"cd {quoted_root} 2>/dev/null || true; "
+                f"if [ -e {quoted_path} ]; then echo 0; else echo 1; fi"
+            )
+            stdin, stdout, stderr = self._ssh.exec_command(cmd)
+            exit_code_str = stdout.read().decode().strip()
+            return exit_code_str == "0"
+        except Exception:
             return False
 
     def _list_directory(self, path="."):
@@ -251,36 +278,60 @@ class SshFilesReader(Mapping):
 
     def _walk_directory(self, path=".", current_level=0, max_levels=None):
         """
-        Recursively walk a directory and yield entries with their paths.
-
-        Args:
-            path: Current directory path
-            current_level: Current recursion level
-            max_levels: Maximum recursion depth (None for unlimited)
+        Recursively walk a directory and yield entries with their paths using a
+        single remote command when possible to minimize SFTP chatter.
 
         Yields:
-            tuple: (path, is_dir) for each entry
+            tuple: (path, is_dir) for each entry, relative to the current rootdir
         """
-        if max_levels is not None and current_level > max_levels:
+        # Fallback to original SFTP-based approach only for the trivial case of max_levels == 0
+        if max_levels == 0:
+            try:
+                entries = self._list_directory(path)
+                for entry in entries:
+                    entry_path = f"{path}/{entry}" if path != "." else entry
+                    yield entry_path, self._is_dir(entry_path)
+            except Exception as e:
+                print(f"Warning: Error walking directory {path}: {e}")
             return
 
+        # Build a single 'find' command on the remote to list files/dirs
         try:
-            entries = self._list_directory(path)
-
-            for entry in entries:
-                entry_path = f"{path}/{entry}" if path != "." else entry
-                is_dir = self._is_dir(entry_path)
-
-                # Yield the current entry
-                yield entry_path, is_dir
-
-                # If it's a directory and we're not at max depth, recurse
-                if is_dir and (max_levels is None or current_level < max_levels):
-                    yield from self._walk_directory(
-                        entry_path, current_level + 1, max_levels
-                    )
+            quoted_root = shlex.quote(self.rootdir)
+            # Depth mapping: entries at depth 1 correspond to children of '.'
+            maxdepth_clause = (
+                f"-maxdepth {max_levels + 1} " if max_levels is not None else ""
+            )
+            # Prune hidden files/dirs if needed
+            prune_hidden = (
+                "\\( -path './.*' -o -path '*/.*' \\) -prune -o "
+                if not self._include_hidden
+                else ""
+            )
+            # Use -printf to get type and relative path (%P removes leading ./)
+            find_cmd = (
+                f"find . -mindepth 1 {maxdepth_clause}{prune_hidden}-printf '%y\t%P\n'"
+            )
+            cmd = f"set -e; cd {quoted_root} 2>/dev/null || true; {find_cmd}"
+            stdin, stdout, stderr = self._ssh.exec_command(cmd)
+            data = stdout.read()
+            text = (
+                data.decode(errors="ignore")
+                if isinstance(data, (bytes, bytearray))
+                else str(data)
+            )
+            for line in text.splitlines():
+                line = line.rstrip("\n")
+                if not line:
+                    continue
+                try:
+                    ftype, relpath = line.split("\t", 1)
+                except ValueError:
+                    continue
+                is_dir = ftype == "d"
+                yield relpath, is_dir
         except Exception as e:
-            print(f"Warning: Error walking directory {path}: {e}")
+            print(f"Warning: Error walking directory using exec_command: {e}")
 
     def _check_path_depth(self, path):
         """
@@ -405,51 +456,61 @@ class SshFilesReader(Mapping):
         Iterate over files and subdirectories recursively based on max_levels.
         Respects include_directories setting to control whether directories are yielded.
         """
-        # Use the current object's max_levels
         max_levels = self._max_levels
 
         if max_levels == 0:
-            # If max_levels is 0, just list the current directory
+            # Single-level listing can remain SFTP-based for simplicity
             entries = self._list_directory(".")
             for entry in entries:
                 if self._is_dir(entry):
-                    if (
-                        self._include_directories
-                    ):  # Only yield directories if include_directories is True
+                    if self._include_directories:
                         yield f"{entry}/"
                 else:
                     yield entry
-        else:
-            # For recursive listing, use _walk_directory
-            seen = set()  # To prevent duplicates
-            for path, is_dir in self._walk_directory(".", 0, max_levels):
-                # Skip the current directory (.)
-                if path == ".":
-                    continue
+            return
 
-                # For directories, add trailing slash and only include if include_directories is True
-                if is_dir:
-                    if (
-                        self._include_directories
-                    ):  # Only yield directories if include_directories is True
-                        path_with_slash = f"{path}/"
-                        if path_with_slash not in seen:
-                            seen.add(path_with_slash)
-                            yield path_with_slash
-                else:
-                    # Always yield files
-                    if path not in seen:
-                        seen.add(path)
-                        yield path
+        # Recursive/Unlimited: use single remote 'find' for efficiency
+        seen = set()
+        for path, is_dir in self._walk_directory(".", 0, max_levels):
+            if is_dir:
+                if self._include_directories:
+                    key = f"{path}/"
+                    if key not in seen:
+                        seen.add(key)
+                        yield key
+            else:
+                if path not in seen:
+                    seen.add(path)
+                    yield path
 
     def __len__(self):
         """
         Return the number of entries up to max_levels deep.
         """
-        count = 0
-        for _ in self:
-            count += 1
-        return count
+        try:
+            # Use remote count via find to avoid streaming all results back
+            quoted_root = shlex.quote(self.rootdir)
+            max_levels = self._max_levels
+            maxdepth_clause = (
+                f"-maxdepth {max_levels + 1} " if max_levels is not None else ""
+            )
+            prune_hidden = (
+                "\\( -path './.*' -o -path '*/.*' \\) -prune -o "
+                if not self._include_hidden
+                else ""
+            )
+            if self._include_directories:
+                type_clause = "\\( -type f -o -type d \\)"
+            else:
+                type_clause = "-type f"
+            find_cmd = f"find . -mindepth 1 {maxdepth_clause}{prune_hidden}{type_clause} -print | wc -l"
+            cmd = f"set -e; cd {quoted_root} 2>/dev/null || true; {find_cmd}"
+            stdin, stdout, stderr = self._ssh.exec_command(cmd)
+            out = stdout.read().decode().strip()
+            return int(out) if out.isdigit() else 0
+        except Exception:
+            # Fallback to iterating if remote counting fails
+            return sum(1 for _ in self)
 
     def __contains__(self, k):
         """
@@ -470,7 +531,7 @@ class SshFilesReader(Mapping):
             # In non-strict mode, just return False for paths beyond max_levels
             return False
 
-        # For direct contains check, we can just check existence
+        # For direct contains check, use efficient remote existence test
         return self._path_exists(path)
 
     def __del__(self):
@@ -643,6 +704,117 @@ class SshFiles(SshFilesReader, MutableMapping):
 
         # Return a new instance for the created directory
         return self[path]
+
+    # -----------------------
+    # High-performance syncs
+    # -----------------------
+    def sync_from_remote(
+        self,
+        local_target_path: str,
+        *,
+        delete_local_files_not_in_remote: bool = False,
+        delete_mode: Optional[
+            Literal["after", "before", "delay", "during", "recycle"]
+        ] = None,
+        recycle_bin_dir: Optional[str] = None,
+        compress: bool = True,
+        extra_args: Optional[List[str]] = None,
+    ) -> None:
+        """Synchronize remote rootdir to a local directory using rsync over SSH.
+
+        This uses one local rsync invocation, which negotiates efficiently with the
+        remote over SSH, minimizing round-trips and transferring only deltas.
+
+        Args:
+            local_target_path: Local directory to sync into (created if missing).
+            delete_local_files_not_in_remote: If True, remove local files that are not on remote (rsync --delete).
+            delete_mode: Choose when/how deletion occurs. One of:
+                - 'before'  -> --delete-before
+                - 'after'   -> --delete-after
+                - 'delay'   -> --delete-delay
+                - 'during'  -> --delete-during
+                - 'recycle' -> move would-be deletions into recycle_bin_dir using --backup/--backup-dir
+                If None, rsync uses its default timing when --delete is set.
+            recycle_bin_dir: When delete_mode='recycle', directory to store deleted items.
+                Defaults to the OS recycle location (macOS: ~/.Trash, Linux: ~/.local/share/Trash/files).
+            compress: If True, use -z compression.
+            extra_args: Additional rsync args (list of strings) to append.
+
+        Raises:
+            RuntimeError: If rsync is unavailable or the sync fails.
+        """
+        # Ensure local destination exists
+        os.makedirs(local_target_path, exist_ok=True)
+
+        # Verify rsync is available locally
+        if shutil.which("rsync") is None:
+            raise RuntimeError("rsync is not available on the local system")
+
+        # Build ssh command used by rsync (-e)
+        ssh_parts = ["ssh", "-p", str(self._conn_port)]
+        if self._conn_key_filename:
+            ssh_parts += ["-i", self._conn_key_filename]
+        ssh_cmd_str = " ".join(shlex.quote(p) for p in ssh_parts)
+
+        # Build rsync args
+        rsync_cmd: List[str] = ["rsync", "-a"]
+        if compress:
+            rsync_cmd.append("-z")
+        rsync_cmd += ["-e", ssh_cmd_str]
+
+        # Map delete timing flags
+        delete_flag_map = {
+            "before": "--delete-before",
+            "after": "--delete-after",
+            "delay": "--delete-delay",
+            "during": "--delete-during",
+        }
+
+        # Determine deletion behavior
+        if delete_mode == "recycle":
+            # Recycle implies deletion plus backup to recycle bin dir
+            rsync_cmd.append("--delete")
+            # Choose default recycle bin dir if not provided
+            if not recycle_bin_dir:
+                if sys.platform == "darwin":
+                    recycle_bin_dir = os.path.expanduser("~/.Trash")
+                elif sys.platform.startswith("linux"):
+                    recycle_bin_dir = os.path.expanduser("~/.local/share/Trash/files")
+                else:
+                    recycle_bin_dir = os.path.expanduser("~/.Trash")
+            os.makedirs(recycle_bin_dir, exist_ok=True)
+            rsync_cmd += ["--backup", f"--backup-dir={recycle_bin_dir}"]
+        elif delete_local_files_not_in_remote:
+            rsync_cmd.append("--delete")
+            if delete_mode:
+                if delete_mode not in delete_flag_map:
+                    raise ValueError(
+                        f"Invalid delete_mode: {delete_mode}. Valid: {list(delete_flag_map.keys()) + ['recycle']}"
+                    )
+                rsync_cmd.append(delete_flag_map[delete_mode])
+
+        # Allow caller-supplied extra args before operands
+        if extra_args:
+            rsync_cmd.extend(extra_args)
+
+        # Source and destination (operands at the end)
+        # Ensure trailing slash to copy contents of rootdir into target directory
+        remote_src = f"{self._conn_user}@{self._conn_host}:{self.rootdir.rstrip('/')}/"
+        local_dst = os.path.join(local_target_path, "")
+        rsync_cmd += [remote_src, local_dst]
+
+        # Execute
+        try:
+            proc = subprocess.run(
+                rsync_cmd,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(
+                f"rsync failed with code {e.returncode}:\nSTDOUT:\n{e.stdout}\nSTDERR:\n{e.stderr}"
+            )
 
 
 # Default encoding for text files (which can be edited in place to change SshTextFiles default encoding)

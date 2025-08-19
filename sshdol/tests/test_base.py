@@ -258,3 +258,35 @@ def test_recursive_functionality():
     assert (
         "level0/level1/file.txt" not in limited_no_dirs_keys
     )  # Beyond max depth not included
+
+
+def test_sync_from_remote(tmp_path):
+    """Ensure rsync-based sync_from_remote mirrors remote rootdir to local."""
+    import shutil as _shutil
+
+    if _shutil.which("rsync") is None:
+        pytest.skip("rsync not available locally; skipping sync_from_remote test")
+
+    # Initialize a writable remote store and ensure it's empty
+    s = SshFiles(
+        host=SSH_TEST_HOST,
+        rootdir=SSH_TEST_ROOTDIR,
+        max_levels=None,
+        create_dirs=True,
+    )
+    empty_test_store(s)
+
+    # Create a small nested structure on remote
+    s["A.txt"] = b"root file"
+    s["dir/sub/B.txt"] = b"nested file"
+
+    # Sync to local temp dir
+    local_dir = tmp_path / "mirror"
+    s.sync_from_remote(str(local_dir))
+
+    # Verify files exist locally with correct contents
+    a_path = local_dir / "A.txt"
+    b_path = local_dir / "dir" / "sub" / "B.txt"
+    assert a_path.is_file() and b_path.is_file()
+    assert a_path.read_bytes() == b"root file"
+    assert b_path.read_bytes() == b"nested file"
