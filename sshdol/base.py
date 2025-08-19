@@ -103,15 +103,20 @@ class SshFilesReader(Mapping):
     Read-only interface to files on a remote SSH server.
 
     Examples:
-        # Connect using an SSH config alias
-        >>> s = SshFilesReader(host="myserver")  # doctest: +SKIP
 
-        # Connect with explicit parameters
-        >>> s = SshFilesReader(user="username", url="example.com")  # doctest: +SKIP
+    Connect using an SSH config alias
 
-        # Access nested files with path-based keys
-        >>> s = SshFilesReader(host="myserver", max_levels=None)  # doctest: +SKIP
-        >>> content = s["path/to/nested/file.txt"]  # doctest: +SKIP
+    >>> s = SshFilesReader(host="myserver")  # doctest: +SKIP
+
+    Connect with explicit parameters
+
+    >>> s = SshFilesReader(user="username", url="example.com")  # doctest: +SKIP
+
+    Access nested files with path-based keys
+
+    >>> s = SshFilesReader(host="myserver", max_levels=None)  # doctest: +SKIP
+    >>> content = s["path/to/nested/file.txt"]  # doctest: +SKIP
+
     """
 
     __default_encoding = None
@@ -554,12 +559,14 @@ class SshFiles(SshFilesReader, MutableMapping):
     Read-write interface to files on a remote SSH server.
 
     Example:
+
         >>> s = SshFiles(host="myserver")  # doctest: +SKIP
         >>> s['file.txt'] = b'Hello, world!'  # doctest: +SKIP
         >>> s = SshFiles(host="myserver", encoding="utf-8")  # doctest: +SKIP
         >>> s['file.txt'] = 'Hello, world!'  # doctest: +SKIP
 
-        # Write to nested paths with directory creation
+        Write to nested paths with directory creation
+        
         >>> s = SshFiles(host="myserver", create_dirs=True)  # doctest: +SKIP
         >>> s['dir1/dir2/file.txt'] = b'Nested content'  # doctest: +SKIP
     """
