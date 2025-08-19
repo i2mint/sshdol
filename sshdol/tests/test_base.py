@@ -260,12 +260,12 @@ def test_recursive_functionality():
     )  # Beyond max depth not included
 
 
-def test_sync_from_remote(tmp_path):
-    """Ensure rsync-based sync_from_remote mirrors remote rootdir to local."""
+def test_sync_to(tmp_path):
+    """Ensure rsync-based sync_to mirrors remote rootdir to local."""
     import shutil as _shutil
 
     if _shutil.which("rsync") is None:
-        pytest.skip("rsync not available locally; skipping sync_from_remote test")
+        pytest.skip("rsync not available locally; skipping sync_to test")
 
     # Initialize a writable remote store and ensure it's empty
     s = SshFiles(
@@ -282,7 +282,7 @@ def test_sync_from_remote(tmp_path):
 
     # Sync to local temp dir
     local_dir = tmp_path / "mirror"
-    s.sync_from_remote(str(local_dir))
+    s.sync_to(str(local_dir))
 
     # Verify files exist locally with correct contents
     a_path = local_dir / "A.txt"

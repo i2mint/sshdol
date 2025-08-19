@@ -50,6 +50,69 @@ if 'example.bin' in s:
 
 ## Features
 
+### Fast sync (to local folder)
+
+There are two ways to copy/sync a remote SSH directory into a local folder.
+
+- Mapping-based (simple but slow on many files):
+
+```python
+import dol
+from sshdol.base import SshFiles
+
+src = SshFiles(host="myserver", rootdir="/remote/path")
+target = dol.Files("/local/target/folder")
+
+# This works and preserves dol’s familiar Mapping API, but can be very slow
+target.update(src)
+```
+
+You can also use higher-level helpers such as `xdol.update_with_policy` to control sync behavior (e.g., mirror vs copy), but the round-trips remain expensive for large trees.
+(Note: Both of these are applicable to any `Mapping` instance `src` and `MutableMapping` instance `target`.)
+
+- High-performance (recommended for many files):
+
+Use `SshFiles.sync_to`, which leverages `rsync` under the hood for orders-of-magnitude faster syncs. It only supports local folder targets (or objects that expose a filesystem root via a `rootdir` attribute, e.g., `dol.Files`).
+
+```python
+from sshdol.base import SshFiles
+import dol
+
+src = SshFiles(host="myserver", rootdir="/remote/path")
+
+# Sync to a local path (fast; uses rsync)
+src.sync_to("/local/target/folder")
+
+# Or sync to a dol.Files instance (it has a .rootdir pointing to a local folder)
+dst = dol.Files("/local/target/folder")
+src.sync_to(dst)
+```
+
+Notes:
+- Requires `rsync` installed locally.
+- Target must be a local filesystem path or an object with a `.rootdir` that is one (e.g., `dol.Files`).
+- You can control deletion timing and safety:
+
+```python
+# Remove local files not present on remote (mirror behavior)
+src.sync_to(
+    "/local/target/folder",
+    delete_local_files_not_in_remote=True,
+    delete_mode="during",  # 'before' | 'after' | 'delay' | 'during'
+)
+
+# “Recycle” deletions instead of permanently deleting them
+src.sync_to(
+    "/local/target/folder",
+    delete_mode="recycle",            # uses rsync --backup/--backup-dir
+    recycle_bin="~/.Trash",           # optional (defaults OS-specifically)
+)
+```
+
+Compared to `target.update(src)`, `sync_to` performs a single rsync negotiation and transfers only changed file blocks, making it dramatically faster on large trees.
+
+
+
 ### Binary and Text Mode
 
 `sshdol` provides both binary and text interfaces:

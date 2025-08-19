@@ -708,15 +708,15 @@ class SshFiles(SshFilesReader, MutableMapping):
     # -----------------------
     # High-performance syncs
     # -----------------------
-    def sync_from_remote(
+    def sync_to(
         self,
-        local_target_path: str,
+        target: str,
         *,
         delete_local_files_not_in_remote: bool = False,
         delete_mode: Optional[
             Literal["after", "before", "delay", "during", "recycle"]
         ] = None,
-        recycle_bin_dir: Optional[str] = None,
+        recycle_bin: Optional[str] = None,
         compress: bool = True,
         extra_args: Optional[List[str]] = None,
     ) -> None:
@@ -726,16 +726,16 @@ class SshFiles(SshFilesReader, MutableMapping):
         remote over SSH, minimizing round-trips and transferring only deltas.
 
         Args:
-            local_target_path: Local directory to sync into (created if missing).
+            target: Local directory to sync into (created if missing).
             delete_local_files_not_in_remote: If True, remove local files that are not on remote (rsync --delete).
             delete_mode: Choose when/how deletion occurs. One of:
                 - 'before'  -> --delete-before
                 - 'after'   -> --delete-after
                 - 'delay'   -> --delete-delay
                 - 'during'  -> --delete-during
-                - 'recycle' -> move would-be deletions into recycle_bin_dir using --backup/--backup-dir
+                - 'recycle' -> move would-be deletions into recycle_bin using --backup/--backup-dir
                 If None, rsync uses its default timing when --delete is set.
-            recycle_bin_dir: When delete_mode='recycle', directory to store deleted items.
+            recycle_bin: When delete_mode='recycle', directory to store deleted items.
                 Defaults to the OS recycle location (macOS: ~/.Trash, Linux: ~/.local/share/Trash/files).
             compress: If True, use -z compression.
             extra_args: Additional rsync args (list of strings) to append.
@@ -743,8 +743,18 @@ class SshFiles(SshFilesReader, MutableMapping):
         Raises:
             RuntimeError: If rsync is unavailable or the sync fails.
         """
+        if isinstance(target, Path):
+            target = str(target)
+        elif (
+            not isinstance(target, str)  # target is not a string
+            and hasattr(target, "rootdir")  # and has a rootdir attribute
+            and isinstance(target.rootdir, str)  # which is a string
+            and os.path.exists(target.rootdir)  # and exists as a directory
+        ):  # then take that as the target
+            target = target.rootdir
+
         # Ensure local destination exists
-        os.makedirs(local_target_path, exist_ok=True)
+        os.makedirs(target, exist_ok=True)
 
         # Verify rsync is available locally
         if shutil.which("rsync") is None:
@@ -775,15 +785,15 @@ class SshFiles(SshFilesReader, MutableMapping):
             # Recycle implies deletion plus backup to recycle bin dir
             rsync_cmd.append("--delete")
             # Choose default recycle bin dir if not provided
-            if not recycle_bin_dir:
+            if not recycle_bin:
                 if sys.platform == "darwin":
-                    recycle_bin_dir = os.path.expanduser("~/.Trash")
+                    recycle_bin = os.path.expanduser("~/.Trash")
                 elif sys.platform.startswith("linux"):
-                    recycle_bin_dir = os.path.expanduser("~/.local/share/Trash/files")
+                    recycle_bin = os.path.expanduser("~/.local/share/Trash/files")
                 else:
-                    recycle_bin_dir = os.path.expanduser("~/.Trash")
-            os.makedirs(recycle_bin_dir, exist_ok=True)
-            rsync_cmd += ["--backup", f"--backup-dir={recycle_bin_dir}"]
+                    recycle_bin = os.path.expanduser("~/.Trash")
+            os.makedirs(recycle_bin, exist_ok=True)
+            rsync_cmd += ["--backup", f"--backup-dir={recycle_bin}"]
         elif delete_local_files_not_in_remote:
             rsync_cmd.append("--delete")
             if delete_mode:
@@ -800,7 +810,7 @@ class SshFiles(SshFilesReader, MutableMapping):
         # Source and destination (operands at the end)
         # Ensure trailing slash to copy contents of rootdir into target directory
         remote_src = f"{self._conn_user}@{self._conn_host}:{self.rootdir.rstrip('/')}/"
-        local_dst = os.path.join(local_target_path, "")
+        local_dst = os.path.join(target, "")
         rsync_cmd += [remote_src, local_dst]
 
         # Execute
