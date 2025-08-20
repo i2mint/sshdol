@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>sshdol.tests.utils_for_testing &mdash; sshdol 0.0.5 documentation</title>
+  <title>sshdol.tests.utils_for_testing &mdash; sshdol 0.0.6 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
       <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
@@ -15,7 +15,7 @@
   
       <script src="../../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../../_static/documentation_options.js?v=282f96c0"></script>
+      <script src="../../../_static/documentation_options.js?v=1fd71caa"></script>
       <script src="../../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../../_static/toggleprompt.js?v=d7ede5d2"></script>
@@ -54,6 +54,7 @@
 <li class="toctree-l1"><a class="reference internal" href="test_base.html">sshdol.tests.test_base</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">sshdol.tests.utils_for_testing</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#sshdol.tests.utils_for_testing.empty_test_store"><code class="docutils literal notranslate"><span class="pre">empty_test_store()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#sshdol.tests.utils_for_testing.sort_keys_deepest_first"><code class="docutils literal notranslate"><span class="pre">sort_keys_deepest_first()</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -90,6 +91,14 @@
 <span class="sig-prename descclassname"><span class="pre">sshdol.tests.utils_for_testing.</span></span><span class="sig-name descname"><span class="pre">empty_test_store</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">store</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">store_as_expected=&lt;function</span> <span class="pre">_is_the_test_folder&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keys_as_expected=&lt;function</span> <span class="pre">_keys_as_expected&gt;</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/sshdol/tests/utils_for_testing.html#empty_test_store"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sshdol.tests.utils_for_testing.empty_test_store" title="Link to this definition"></a></dt>
 <dd><p>A function that deletes all items of a store, after verifying a condition on the keys.
 The raison d’être of this function is to not mistakingly empty the wrong store.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="sshdol.tests.utils_for_testing.sort_keys_deepest_first">
+<span class="sig-prename descclassname"><span class="pre">sshdol.tests.utils_for_testing.</span></span><span class="sig-name descname"><span class="pre">sort_keys_deepest_first</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">keys</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/sshdol/tests/utils_for_testing.html#sort_keys_deepest_first"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sshdol.tests.utils_for_testing.sort_keys_deepest_first" title="Link to this definition"></a></dt>
+<dd><p>Return keys sorted by deepest path first, then reverse-alphabetically.</p>
+<p>This ensures files in deeper directories are deleted before their parent directories,
+avoiding “directory not empty” errors on stricter filesystems/servers.</p>
 </dd></dl>
 
 </section>

@@ -5,7 +5,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>sshdol.tests.utils_for_testing &mdash; sshdol 0.0.5 documentation</title>
+  <title>sshdol.tests.utils_for_testing &mdash; sshdol 0.0.6 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
       <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../../_static/documentation_options.js?v=282f96c0"></script>
+      <script src="../../../_static/documentation_options.js?v=1fd71caa"></script>
       <script src="../../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../../_static/toggleprompt.js?v=d7ede5d2"></script>
@@ -121,6 +121,20 @@
     <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="n">keys</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="n">max_keys</span>
 
 
+<div class="viewcode-block" id="sort_keys_deepest_first">
+<a class="viewcode-back" href="../../../module_docs/sshdol/tests/utils_for_testing.html#sshdol.tests.utils_for_testing.sort_keys_deepest_first">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">sort_keys_deepest_first</span><span class="p">(</span><span class="n">keys</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return keys sorted by deepest path first, then reverse-alphabetically.</span>
+
+<span class="sd">    This ensures files in deeper directories are deleted before their parent directories,</span>
+<span class="sd">    avoiding &quot;directory not empty&quot; errors on stricter filesystems/servers.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Sort by depth (count of &#39;/&#39;), deepest first, then reverse-lexicographically</span>
+    <span class="c1"># so that sibling files come before their parent directory key.</span>
+    <span class="k">return</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">keys</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">k</span><span class="p">:</span> <span class="p">(</span><span class="n">k</span><span class="o">.</span><span class="n">count</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">),</span> <span class="n">k</span><span class="p">),</span> <span class="n">reverse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div>
+
+
+
 <div class="viewcode-block" id="empty_test_store">
 <a class="viewcode-back" href="../../../module_docs/sshdol/tests/utils_for_testing.html#sshdol.tests.utils_for_testing.empty_test_store">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">empty_test_store</span><span class="p">(</span>
@@ -135,9 +149,8 @@
     <span class="c1"># so that the error message is more informative, and the function is more efficient</span>
     <span class="c1"># (don&#39;t need to fetch the keys twice)</span>
     <span class="k">if</span> <span class="n">store_as_expected</span><span class="p">(</span><span class="n">store</span><span class="p">):</span>
-        <span class="c1"># Note: We&#39;re sorting the keys in reverse order, so that we don&#39;t run into the</span>
-        <span class="c1"># &quot;can&#39;t delete non-empty folder&quot; problem.</span>
-        <span class="n">keys</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">_first_n_keys_and_bust_if_more</span><span class="p">(</span><span class="n">store</span><span class="p">),</span> <span class="n">reverse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="c1"># Sort by deepest path first so files/dirs at the bottom are removed before parents.</span>
+        <span class="n">keys</span> <span class="o">=</span> <span class="n">sort_keys_deepest_first</span><span class="p">(</span><span class="n">_first_n_keys_and_bust_if_more</span><span class="p">(</span><span class="n">store</span><span class="p">))</span>
         <span class="k">if</span> <span class="n">keys_as_expected</span><span class="p">(</span><span class="n">keys</span><span class="p">):</span>
             <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">keys</span><span class="p">:</span>
                 <span class="k">del</span> <span class="n">store</span><span class="p">[</span><span class="n">k</span><span class="p">]</span>
