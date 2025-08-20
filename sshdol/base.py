@@ -33,6 +33,15 @@ import paramiko
 from functools import lru_cache
 import shlex
 
+# Make a DFLT_RECYCLE_BIN
+if sys.platform == "darwin":
+    DFLT_RECYCLE_BIN = os.path.expanduser("~/.Trash")
+elif sys.platform.startswith("linux"):
+    DFLT_RECYCLE_BIN = os.path.expanduser("~/.local/share/Trash/files")
+else:
+    DFLT_RECYCLE_BIN = os.path.expanduser("~/.Trash")
+
+
 places_to_look_for_default_key = ["~/.ssh/id_rsa", "~/.ssh/id_ed25519"]
 
 
@@ -566,7 +575,7 @@ class SshFiles(SshFilesReader, MutableMapping):
         >>> s['file.txt'] = 'Hello, world!'  # doctest: +SKIP
 
         Write to nested paths with directory creation
-        
+
         >>> s = SshFiles(host="myserver", create_dirs=True)  # doctest: +SKIP
         >>> s['dir1/dir2/file.txt'] = b'Nested content'  # doctest: +SKIP
     """
@@ -723,7 +732,7 @@ class SshFiles(SshFilesReader, MutableMapping):
         delete_mode: Optional[
             Literal["after", "before", "delay", "during", "recycle"]
         ] = None,
-        recycle_bin: Optional[str] = None,
+        recycle_bin: str = DFLT_RECYCLE_BIN,
         compress: bool = True,
         extra_args: Optional[List[str]] = None,
     ) -> None:
@@ -771,7 +780,7 @@ class SshFiles(SshFilesReader, MutableMapping):
         ssh_parts = ["ssh", "-p", str(self._conn_port)]
         if self._conn_key_filename:
             ssh_parts += ["-i", self._conn_key_filename]
-        
+
         # Add extra SSH options from environment variable if set
         # This allows CI environments or users to specify additional SSH options
         extra_ssh_options = os.environ.get('SSHDOL_SYNC_TO_EXTRA_SSH_OPTIONS')
@@ -798,14 +807,6 @@ class SshFiles(SshFilesReader, MutableMapping):
         if delete_mode == "recycle":
             # Recycle implies deletion plus backup to recycle bin dir
             rsync_cmd.append("--delete")
-            # Choose default recycle bin dir if not provided
-            if not recycle_bin:
-                if sys.platform == "darwin":
-                    recycle_bin = os.path.expanduser("~/.Trash")
-                elif sys.platform.startswith("linux"):
-                    recycle_bin = os.path.expanduser("~/.local/share/Trash/files")
-                else:
-                    recycle_bin = os.path.expanduser("~/.Trash")
             os.makedirs(recycle_bin, exist_ok=True)
             rsync_cmd += ["--backup", f"--backup-dir={recycle_bin}"]
         elif delete_local_files_not_in_remote:

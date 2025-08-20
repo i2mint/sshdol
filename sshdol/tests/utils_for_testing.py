@@ -41,6 +41,17 @@ def _keys_as_expected(keys, max_keys=MAX_TEST_KEYS):
     return len(keys) <= max_keys
 
 
+def sort_keys_deepest_first(keys):
+    """Return keys sorted by deepest path first, then reverse-alphabetically.
+
+    This ensures files in deeper directories are deleted before their parent directories,
+    avoiding "directory not empty" errors on stricter filesystems/servers.
+    """
+    # Sort by depth (count of '/'), deepest first, then reverse-lexicographically
+    # so that sibling files come before their parent directory key.
+    return sorted(keys, key=lambda k: (k.count("/"), k), reverse=True)
+
+
 def empty_test_store(
     store, *, store_as_expected=_is_the_test_folder, keys_as_expected=_keys_as_expected
 ):
@@ -53,9 +64,8 @@ def empty_test_store(
     # so that the error message is more informative, and the function is more efficient
     # (don't need to fetch the keys twice)
     if store_as_expected(store):
-        # Note: We're sorting the keys in reverse order, so that we don't run into the
-        # "can't delete non-empty folder" problem.
-        keys = sorted(_first_n_keys_and_bust_if_more(store), reverse=True)
+        # Sort by deepest path first so files/dirs at the bottom are removed before parents.
+        keys = sort_keys_deepest_first(_first_n_keys_and_bust_if_more(store))
         if keys_as_expected(keys):
             for k in keys:
                 del store[k]
