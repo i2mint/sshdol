@@ -566,7 +566,7 @@ class SshFiles(SshFilesReader, MutableMapping):
         >>> s['file.txt'] = 'Hello, world!'  # doctest: +SKIP
 
         Write to nested paths with directory creation
-        
+
         >>> s = SshFiles(host="myserver", create_dirs=True)  # doctest: +SKIP
         >>> s['dir1/dir2/file.txt'] = b'Nested content'  # doctest: +SKIP
     """
@@ -771,10 +771,10 @@ class SshFiles(SshFilesReader, MutableMapping):
         ssh_parts = ["ssh", "-p", str(self._conn_port)]
         if self._conn_key_filename:
             ssh_parts += ["-i", self._conn_key_filename]
-        
+
         # Add extra SSH options from environment variable if set
         # This allows CI environments or users to specify additional SSH options
-        extra_ssh_options = os.environ.get('SSHDOL_SYNC_TO_EXTRA_SSH_OPTIONS')
+        extra_ssh_options = os.environ.get("SSHDOL_SYNC_TO_EXTRA_SSH_OPTIONS")
         if extra_ssh_options:
             # Split the string into individual options, handling quoted arguments properly
             ssh_parts += shlex.split(extra_ssh_options)
