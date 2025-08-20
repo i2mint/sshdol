@@ -4,3 +4,6 @@
 
    module_docs/sshdol
    module_docs/sshdol/base
+   module_docs/sshdol/tests
+   module_docs/sshdol/tests/test_base
+   module_docs/sshdol/tests/utils_for_testing

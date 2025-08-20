@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>sshdol.base &mdash; sshdol 0.0.4 documentation</title>
+  <title>sshdol.base &mdash; sshdol 0.0.5 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=e59714d7" />
       <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css?v=76b2166b" />
@@ -15,7 +15,7 @@
   
       <script src="../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../_static/documentation_options.js?v=8c5712d9"></script>
+      <script src="../../_static/documentation_options.js?v=282f96c0"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/toggleprompt.js?v=d7ede5d2"></script>
@@ -24,6 +24,7 @@
     <script src="../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="sshdol.tests" href="tests.html" />
     <link rel="prev" title="sshdol" href="../sshdol.html" /> 
 </head>
 
@@ -52,6 +53,7 @@
 <li class="toctree-l1 current"><a class="current reference internal" href="#">sshdol.base</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#sshdol.base.SshFiles"><code class="docutils literal notranslate"><span class="pre">SshFiles</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#sshdol.base.SshFiles.mkdir"><code class="docutils literal notranslate"><span class="pre">SshFiles.mkdir()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sshdol.base.SshFiles.sync_to"><code class="docutils literal notranslate"><span class="pre">SshFiles.sync_to()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#sshdol.base.SshFilesReader"><code class="docutils literal notranslate"><span class="pre">SshFilesReader</span></code></a></li>
@@ -62,6 +64,9 @@
 <li class="toctree-l2"><a class="reference internal" href="#sshdol.base.split_path"><code class="docutils literal notranslate"><span class="pre">split_path()</span></code></a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="tests.html">sshdol.tests</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tests/test_base.html">sshdol.tests.test_base</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tests/utils_for_testing.html">sshdol.tests.utils_for_testing</a></li>
 </ul>
 
         </div>
@@ -114,9 +119,11 @@
 <span class="gp">&gt;&gt;&gt; </span><span class="n">s</span><span class="p">[</span><span class="s1">&#39;file.txt&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;Hello, world!&#39;</span>  
 </pre></div>
 </div>
-<p># Write to nested paths with directory creation
-&gt;&gt;&gt; s = SshFiles(host=”myserver”, create_dirs=True)  # doctest: +SKIP
-&gt;&gt;&gt; s[‘dir1/dir2/file.txt’] = b’Nested content’  # doctest: +SKIP</p>
+<p>Write to nested paths with directory creation</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">s</span> <span class="o">=</span> <span class="n">SshFiles</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="s2">&quot;myserver&quot;</span><span class="p">,</span> <span class="n">create_dirs</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="n">s</span><span class="p">[</span><span class="s1">&#39;dir1/dir2/file.txt&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;Nested content&#39;</span>  
+</pre></div>
+</div>
 <dl class="py method">
 <dt class="sig sig-object py" id="sshdol.base.SshFiles.mkdir">
 <span class="sig-name descname"><span class="pre">mkdir</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exist_ok</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/sshdol/base.html#SshFiles.mkdir"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sshdol.base.SshFiles.mkdir" title="Link to this definition"></a></dt>
@@ -140,20 +147,56 @@
 </dl>
 </dd></dl>
 
+<dl class="py method">
+<dt class="sig sig-object py" id="sshdol.base.SshFiles.sync_to">
+<span class="sig-name descname"><span class="pre">sync_to</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">target</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">delete_local_files_not_in_remote</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">delete_mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'after'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'before'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'delay'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'during'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'recycle'</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">recycle_bin</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compress</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">extra_args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/sshdol/base.html#SshFiles.sync_to"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sshdol.base.SshFiles.sync_to" title="Link to this definition"></a></dt>
+<dd><p>Synchronize remote rootdir to a local directory using rsync over SSH.</p>
+<p>This uses one local rsync invocation, which negotiates efficiently with the
+remote over SSH, minimizing round-trips and transferring only deltas.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>target</strong> – Local directory to sync into (created if missing).</p></li>
+<li><p><strong>delete_local_files_not_in_remote</strong> – If True, remove local files that are not on remote (rsync –delete).</p></li>
+<li><p><strong>delete_mode</strong> – Choose when/how deletion occurs. One of:
+- ‘before’  -&gt; –delete-before
+- ‘after’   -&gt; –delete-after
+- ‘delay’   -&gt; –delete-delay
+- ‘during’  -&gt; –delete-during
+- ‘recycle’ -&gt; move would-be deletions into recycle_bin using –backup/–backup-dir
+If None, rsync uses its default timing when –delete is set.</p></li>
+<li><p><strong>recycle_bin</strong> – When delete_mode=’recycle’, directory to store deleted items.
+Defaults to the OS recycle location (macOS: ~/.Trash, Linux: ~/.local/share/Trash/files).</p></li>
+<li><p><strong>compress</strong> – If True, use -z compression.</p></li>
+<li><p><strong>extra_args</strong> – Additional rsync args (list of strings) to append.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>RuntimeError</strong> – If rsync is unavailable or the sync fails.</p>
+</dd>
+</dl>
+</dd></dl>
+
 </dd></dl>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="sshdol.base.SshFilesReader">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">sshdol.base.</span></span><span class="sig-name descname"><span class="pre">SshFilesReader</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">host</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">user</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">password</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">url</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">22</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key_filename</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rootdir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'.'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">include_hidden</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">include_directories</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dir_access</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">encoding</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_levels</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">create_dirs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strict_contains</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/sshdol/base.html#SshFilesReader"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sshdol.base.SshFilesReader" title="Link to this definition"></a></dt>
 <dd><p>Read-only interface to files on a remote SSH server.</p>
-<p class="rubric">Examples</p>
-<p># Connect using an SSH config alias
-&gt;&gt;&gt; s = SshFilesReader(host=”myserver”)  # doctest: +SKIP</p>
-<p># Connect with explicit parameters
-&gt;&gt;&gt; s = SshFilesReader(user=”username”, url=”example.com”)  # doctest: +SKIP</p>
-<p># Access nested files with path-based keys
-&gt;&gt;&gt; s = SshFilesReader(host=”myserver”, max_levels=None)  # doctest: +SKIP
-&gt;&gt;&gt; content = s[“path/to/nested/file.txt”]  # doctest: +SKIP</p>
+<p>Examples:</p>
+<p>Connect using an SSH config alias</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">s</span> <span class="o">=</span> <span class="n">SshFilesReader</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="s2">&quot;myserver&quot;</span><span class="p">)</span>  
+</pre></div>
+</div>
+<p>Connect with explicit parameters</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">s</span> <span class="o">=</span> <span class="n">SshFilesReader</span><span class="p">(</span><span class="n">user</span><span class="o">=</span><span class="s2">&quot;username&quot;</span><span class="p">,</span> <span class="n">url</span><span class="o">=</span><span class="s2">&quot;example.com&quot;</span><span class="p">)</span>  
+</pre></div>
+</div>
+<p>Access nested files with path-based keys</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">s</span> <span class="o">=</span> <span class="n">SshFilesReader</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="s2">&quot;myserver&quot;</span><span class="p">,</span> <span class="n">max_levels</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="n">content</span> <span class="o">=</span> <span class="n">s</span><span class="p">[</span><span class="s2">&quot;path/to/nested/file.txt&quot;</span><span class="p">]</span>  
+</pre></div>
+</div>
 </dd></dl>
 
 <dl class="py class">
@@ -220,6 +263,7 @@
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="../sshdol.html" class="btn btn-neutral float-left" title="sshdol" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="tests.html" class="btn btn-neutral float-right" title="sshdol.tests" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

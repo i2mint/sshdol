@@ -1,0 +1,4 @@
+sshdol.tests.test_base
+======================
+.. automodule:: sshdol.tests.test_base
+   :members:
