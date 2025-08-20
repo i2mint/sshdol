@@ -783,7 +783,7 @@ class SshFiles(SshFilesReader, MutableMapping):
 
         # Add extra SSH options from environment variable if set
         # This allows CI environments or users to specify additional SSH options
-        extra_ssh_options = os.environ.get('SSHDOL_SYNC_TO_EXTRA_SSH_OPTIONS')
+        extra_ssh_options = os.environ.get("SSHDOL_SYNC_TO_EXTRA_SSH_OPTIONS")
         if extra_ssh_options:
             # Split the string into individual options, handling quoted arguments properly
             ssh_parts += shlex.split(extra_ssh_options)
