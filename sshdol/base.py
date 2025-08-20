@@ -771,6 +771,9 @@ class SshFiles(SshFilesReader, MutableMapping):
         ssh_parts = ["ssh", "-p", str(self._conn_port)]
         if self._conn_key_filename:
             ssh_parts += ["-i", self._conn_key_filename]
+        # Add SSH options to handle host key verification
+        # This is needed for CI environments where host keys may not be in known_hosts
+        ssh_parts += ["-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
         ssh_cmd_str = " ".join(shlex.quote(p) for p in ssh_parts)
 
         # Build rsync args
