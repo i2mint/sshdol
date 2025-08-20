@@ -37,9 +37,9 @@ jobs:
       - name: Set SSH Key Permissions
         run: chmod 600 ~/.ssh/sshdol_ci_key
 
-      - name: Add remote host key to known_hosts
-        run: |
-          ssh-keyscan -p 22 ${{ secrets.SSH_TEST_HOST }} >> ~/.ssh/known_hosts
+      # - name: Add remote host key to known_hosts
+      #   run: |
+      #     ssh-keyscan -p 22 ${{ secrets.SSH_TEST_HOST }} >> ~/.ssh/known_hosts
 
       - name: Create SSH Config File
         run: |
