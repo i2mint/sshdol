@@ -9,6 +9,8 @@ jobs:
     name: Validation
     if: "!contains(github.event.head_commit.message, '[skip ci]')"
     runs-on: ubuntu-latest
+    env:
+      SSHDOL_SYNC_TO_EXTRA_SSH_OPTIONS: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
     strategy:
       matrix:
         python-version: ["3.10"]
