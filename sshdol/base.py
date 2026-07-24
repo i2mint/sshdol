@@ -14,9 +14,6 @@ Design notes:
 
 from pathlib import Path
 from typing import (
-    Mapping,
-    MutableMapping,
-    Iterator,
     Any,
     Optional,
     List,
@@ -24,6 +21,7 @@ from typing import (
     Union,
     Literal,
 )
+from collections.abc import Mapping, MutableMapping, Iterator
 import os
 import stat
 import subprocess
@@ -88,7 +86,7 @@ def normalize_path(path: str) -> str:
     return path.replace("\\", "/")
 
 
-def split_path(path: str) -> Tuple[str, str]:
+def split_path(path: str) -> tuple[str, str]:
     """
     Split a path into directory and file parts.
 
@@ -251,7 +249,7 @@ class SshFilesReader(Mapping):
         if rootdir != ".":
             try:
                 self._sftp.chdir(rootdir)
-            except IOError:
+            except OSError:
                 # If directory doesn't exist, don't error - it will be handled by operations
                 pass
 
@@ -260,7 +258,7 @@ class SshFilesReader(Mapping):
         try:
             attr = self._sftp.stat(path)
             return stat.S_ISDIR(attr.st_mode)
-        except IOError:
+        except OSError:
             return False
 
     def _path_exists(self, path):
@@ -603,7 +601,7 @@ class SshFiles(SshFilesReader, MutableMapping):
                 return True
             else:
                 raise KeyError(f"Path exists but is not a directory: {dir_path}")
-        except IOError:
+        except OSError:
             # Directory doesn't exist, create it if allowed
             if not self._create_dirs:
                 raise KeyError(
@@ -729,12 +727,12 @@ class SshFiles(SshFilesReader, MutableMapping):
         target: str,
         *,
         delete_local_files_not_in_remote: bool = False,
-        delete_mode: Optional[
+        delete_mode: None | (
             Literal["after", "before", "delay", "during", "recycle"]
-        ] = None,
+        ) = None,
         recycle_bin: str = DFLT_RECYCLE_BIN,
         compress: bool = True,
-        extra_args: Optional[List[str]] = None,
+        extra_args: list[str] | None = None,
     ) -> None:
         """Synchronize remote rootdir to a local directory using rsync over SSH.
 
@@ -787,10 +785,10 @@ class SshFiles(SshFilesReader, MutableMapping):
         if extra_ssh_options:
             # Split the string into individual options, handling quoted arguments properly
             ssh_parts += shlex.split(extra_ssh_options)
-        ssh_cmd_str = " ".join(shlex.quote(p) for p in ssh_parts)
+        ssh_cmd_str = shlex.join(ssh_parts)
 
         # Build rsync args
-        rsync_cmd: List[str] = ["rsync", "-a"]
+        rsync_cmd: list[str] = ["rsync", "-a"]
         if compress:
             rsync_cmd.append("-z")
         rsync_cmd += ["-e", ssh_cmd_str]
