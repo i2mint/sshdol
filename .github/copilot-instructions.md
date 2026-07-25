@@ -90,18 +90,20 @@ Test these scenarios after making changes to ensure everything works correctly:
 ```python
 # Import and method validation
 from sshdol.base import SshFiles, SshTextFiles
+
 print("Classes imported successfully")
 
 # Method signature validation
-methods = [m for m in dir(SshFiles) if not m.startswith('_')]
-key_methods = ['get', 'items', 'keys', 'sync_to', 'mkdir']
+methods = [m for m in dir(SshFiles) if not m.startswith("_")]
+key_methods = ["get", "items", "keys", "sync_to", "mkdir"]
 for method in key_methods:
     assert method in methods, f"Missing method: {method}"
 print("All key methods available")
 
 # Dependency validation
 import shutil, paramiko
-assert shutil.which('rsync') is not None, "rsync not available"
+
+assert shutil.which("rsync") is not None, "rsync not available"
 print("All dependencies available")
 ```
 

@@ -198,9 +198,9 @@ class SshFilesReader(Mapping):
         self._include_directories = include_directories  # Store the new parameter
         self._dir_access = dir_access  # Store the new parameter
 
-        assert self._encoding is None or isinstance(
-            self._encoding, str
-        ), "Encoding must be a string"
+        assert self._encoding is None or isinstance(self._encoding, str), (
+            "Encoding must be a string"
+        )
 
         # Initialize the SSH connection
         self._ssh = paramiko.SSHClient()
@@ -727,9 +727,8 @@ class SshFiles(SshFilesReader, MutableMapping):
         target: str,
         *,
         delete_local_files_not_in_remote: bool = False,
-        delete_mode: None | (
-            Literal["after", "before", "delay", "during", "recycle"]
-        ) = None,
+        delete_mode: None
+        | (Literal["after", "before", "delay", "during", "recycle"]) = None,
         recycle_bin: str = DFLT_RECYCLE_BIN,
         compress: bool = True,
         extra_args: list[str] | None = None,

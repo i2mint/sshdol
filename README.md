@@ -8,10 +8,10 @@ A Python dict-like interface to SSH files, built on [dol](https://github.com/i2m
 `sshdol` provides a familiar mapping (dict-like) interface to interact with files on remote servers via SSH. Instead of dealing with low-level SSH operations, you can interact with remote files just like you would with Python dictionaries:
 
 ```python
-s['file.txt'] = b'content'   # Write to a file
-content = s['file.txt']      # Read from a file
-'file.txt' in s              # Check if file exists
-list(s)                      # List all files and directories
+s["file.txt"] = b"content"  # Write to a file
+content = s["file.txt"]  # Read from a file
+"file.txt" in s  # Check if file exists
+list(s)  # List all files and directories
 ```
 
 ## Why use sshdol?
@@ -35,16 +35,16 @@ from sshdol.base import SshFiles, SshTextFiles
 s = SshFiles(host="myserver", rootdir="/path/to/safe/directory")
 
 # Write binary data to a file
-s['example.bin'] = b'binary content'
+s["example.bin"] = b"binary content"
 
 # Read the file
-content = s['example.bin']  # Returns b'binary content'
+content = s["example.bin"]  # Returns b'binary content'
 
 # List files and directories
 files = list(s)  # Returns [..., 'example.bin', ...]
 
 # Check if a file exists
-if 'example.bin' in s:
+if "example.bin" in s:
     print("File exists!")
 ```
 
@@ -104,8 +104,8 @@ src.sync_to(
 # “Recycle” deletions instead of permanently deleting them
 src.sync_to(
     "/local/target/folder",
-    delete_mode="recycle",            # uses rsync --backup/--backup-dir
-    recycle_bin="~/.Trash",           # optional (defaults OS-specifically)
+    delete_mode="recycle",  # uses rsync --backup/--backup-dir
+    recycle_bin="~/.Trash",  # optional (defaults OS-specifically)
 )
 ```
 
@@ -120,11 +120,11 @@ Compared to `target.update(src)`, `sync_to` performs a single rsync negotiation 
 ```python
 # Binary mode (default)
 s = SshFiles(host="myserver", rootdir="/path/to/directory")
-s['file.txt'] = b'binary content'
+s["file.txt"] = b"binary content"
 
 # Text mode
 t = SshTextFiles(host="myserver", rootdir="/path/to/directory")
-t['file.txt'] = 'text content'  # Automatically handles encoding/decoding
+t["file.txt"] = "text content"  # Automatically handles encoding/decoding
 ```
 
 ### Recursive Directory Support
@@ -137,17 +137,19 @@ s = SshFiles(
     host="myserver",
     rootdir="/path/to/directory",
     max_levels=None,  # Unlimited recursion for listing
-    create_dirs=True  # Create directories as needed
+    create_dirs=True,  # Create directories as needed
 )
 
 # Write to a deeply nested path (creates directories if they don't exist)
-s['dir1/dir2/dir3/file.txt'] = b'nested content'
+s["dir1/dir2/dir3/file.txt"] = b"nested content"
 
 # Read from the nested path
-content = s['dir1/dir2/dir3/file.txt']  # Returns b'nested content'
+content = s["dir1/dir2/dir3/file.txt"]  # Returns b'nested content'
 
 # List will show all files and directories recursively
-all_files = list(s)  # [..., 'dir1/', 'dir1/dir2/', 'dir1/dir2/dir3/', 'dir1/dir2/dir3/file.txt', ...]
+all_files = list(
+    s
+)  # [..., 'dir1/', 'dir1/dir2/', 'dir1/dir2/dir3/', 'dir1/dir2/dir3/file.txt', ...]
 ```
 
 ### Directory Navigation
@@ -156,13 +158,13 @@ Navigate through directories by accessing folders like dictionary keys:
 
 ```python
 # Get a store instance for a subdirectory
-subdir = s['dir1/']
+subdir = s["dir1/"]
 
 # List only files in the subdirectory
 subdir_files = list(subdir)  # [..., 'dir2/', ...]
 
 # Navigate further
-subsubdir = subdir['dir2/']
+subsubdir = subdir["dir2/"]
 ```
 
 ### Recursion Control
@@ -188,7 +190,7 @@ Automatically create directories when writing to nested paths:
 s = SshFiles(host="myserver", create_dirs=True)
 
 # This will create all necessary directories
-s['new/path/to/file.txt'] = b'content with auto-created directories'
+s["new/path/to/file.txt"] = b"content with auto-created directories"
 ```
 
 ## Authentication Options
@@ -215,10 +217,10 @@ s = SshFiles(user="username", url="example.com", key_filename="~/.ssh/id_rsa")
 t = SshTextFiles(host="myserver")
 
 # Write a text file
-t['notes.txt'] = 'Hello, this is a text note'
+t["notes.txt"] = "Hello, this is a text note"
 
 # Read it back
-text = t['notes.txt']  # Returns 'Hello, this is a text note'
+text = t["notes.txt"]  # Returns 'Hello, this is a text note'
 ```
 
 ### Creating a new directory
@@ -228,10 +230,10 @@ which can then be written in:
 
 ```py
 # Create a new directory
-projects_dir = s.mkdir('projects')
+projects_dir = s.mkdir("projects")
 
 # Write files in the new directory
-projects_dir['README.md'] = b'# Projects Directory'
+projects_dir["README.md"] = b"# Projects Directory"
 ```
 
 But if you specify `create_dirs=True`, you are allowing the store to make these 
@@ -242,7 +244,7 @@ directories automatically, at the moment you want to write in them
 # Create a store with directory creation enabled
 s = SshFiles(host="myserver", create_dirs=True)
 
-s['some_folder/that/did/not/exist/README.md'] = b'Write me!'
+s["some_folder/that/did/not/exist/README.md"] = b"Write me!"
 ```
 
 ### Handling large directory structures
@@ -255,7 +257,7 @@ s = SshFiles(host="myserver", max_levels=2)
 files = list(s)  # [..., 'dir1/', 'dir1/dir2/', 'dir1/dir2/file.txt', ...]
 
 # You can still access deeper files directly
-deep_content = s['dir1/dir2/dir3/dir4/file.txt']
+deep_content = s["dir1/dir2/dir3/dir4/file.txt"]
 ```
 
 ## License
