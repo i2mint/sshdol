@@ -1,12 +1,47 @@
 """Test base module for sshdol."""
 
+import socket
 import pytest
-from sshdol.base import SshFiles
+from sshdol.base import SshFiles, get_ssh_config_for_host
 from sshdol.tests.utils_for_testing import (
     empty_test_store,
     MAX_TEST_KEYS,
     SSH_TEST_ROOTDIR,
     SSH_TEST_HOST,
+)
+
+
+def _ssh_available(*, connect_timeout=3):
+    """Return True if an SSH test server is reachable.
+
+    Used to skip the (integration) tests when no SSH server is available — e.g.
+    on a developer machine with no local sshd — so the suite stays green. In CI
+    a localhost SSH server is stood up, so the tests actually run.
+
+    A short TCP reachability probe guards against hanging for the full TCP
+    timeout when ``~/.ssh/config`` points the alias at an unreachable host
+    (e.g. a decommissioned server).
+    """
+    ssh_config = get_ssh_config_for_host(SSH_TEST_HOST)
+    hostname = ssh_config.get("hostname", SSH_TEST_HOST)
+    port = int(ssh_config.get("port", 22))
+    # Fast fail if the host:port isn't even reachable.
+    try:
+        with socket.create_connection((hostname, port), timeout=connect_timeout):
+            pass
+    except OSError:
+        return False
+    # Reachable — confirm we can actually open the store and do a trivial op.
+    try:
+        store = SshFiles(host=SSH_TEST_HOST, rootdir=SSH_TEST_ROOTDIR)
+        list(store)
+        return True
+    except Exception:
+        return False
+
+
+pytestmark = pytest.mark.skipif(
+    not _ssh_available(), reason="no SSH test server reachable"
 )
 
 
