@@ -1,6 +1,7 @@
 """Utils for testing."""
 
 from importlib.resources import files
+import os
 import json
 
 # Constants
@@ -8,8 +9,14 @@ with open(files("sshdol.tests") / "default_test_config.json") as f:
     default_test_config = json.load(f)
 
 MAX_TEST_KEYS = default_test_config["MAX_TEST_KEYS"]
-SSH_TEST_HOST = default_test_config["SSH_TEST_HOST"]
-SSH_TEST_ROOTDIR = default_test_config["SSH_TEST_ROOTDIR"]
+
+# The test host and rootdir are environment-overridable so the same test suite
+# can target either an external server (via ~/.ssh/config alias) or a localhost
+# SSH server stood up in CI. The JSON file provides the defaults.
+SSH_TEST_HOST = os.environ.get("SSH_TEST_HOST", default_test_config["SSH_TEST_HOST"])
+SSH_TEST_ROOTDIR = os.environ.get(
+    "SSH_TEST_ROOTDIR", default_test_config["SSH_TEST_ROOTDIR"]
+)
 
 
 def _first_n_keys_and_bust_if_more(store, n=MAX_TEST_KEYS):
@@ -29,8 +36,12 @@ def _is_the_test_folder(store):
     """
     A function that checks if the store is the test folder.
     The raison d'être of this function is to not mistakingly empty the wrong store.
+
+    The expected rootdir is tied to the (env-overridable) ``SSH_TEST_ROOTDIR``
+    configuration rather than a hardcoded path, so the safety guard stays
+    correct whether the tests target an external server or a localhost CI one.
     """
-    return store.rootdir == "/home/sshdol_ci/sshdol_ci_tests"
+    return store.rootdir == SSH_TEST_ROOTDIR
 
 
 def _keys_as_expected(keys, max_keys=MAX_TEST_KEYS):

@@ -1,126 +1,266 @@
-name: Continuous Integration
+name: Continuous Integration (uv)
 on: [push, pull_request]
+
+# Workflow-level env vars. sshdol tests run against a localhost SSH server
+# stood up in the validation job (see "Setup localhost SSH server" step).
 env:
   PROJECT_NAME: sshdol
 
 jobs:
+  # First job: Read configuration from pyproject.toml
+  setup:
+    name: Read Configuration
+    runs-on: ubuntu-latest
+    outputs:
+      project-name: ${{ steps.config.outputs.project-name }}
+      python-versions: ${{ steps.config.outputs.python-versions }}
+      pytest-args: ${{ steps.config.outputs.pytest-args }}
+      coverage-enabled: ${{ steps.config.outputs.coverage-enabled }}
+      exclude-paths: ${{ steps.config.outputs.exclude-paths }}
+      test-on-windows: ${{ steps.config.outputs.test-on-windows }}
+      tests-enabled: ${{ steps.config.outputs.tests-enabled }}
+      build-sdist: ${{ steps.config.outputs.build-sdist }}
+      build-wheel: ${{ steps.config.outputs.build-wheel }}
+      metrics-enabled: ${{ steps.config.outputs.metrics-enabled }}
+      metrics-config-path: ${{ steps.config.outputs.metrics-config-path }}
+      metrics-storage-branch: ${{ steps.config.outputs.metrics-storage-branch }}
+      metrics-python-version: ${{ steps.config.outputs.metrics-python-version }}
+      metrics-force-run: ${{ steps.config.outputs.metrics-force-run }}
+      ruff-enabled: ${{ steps.config.outputs.ruff-enabled }}
+      black-enabled: ${{ steps.config.outputs.black-enabled }}
+      mypy-enabled: ${{ steps.config.outputs.mypy-enabled }}
+      docs-enabled: ${{ steps.config.outputs.docs-enabled }}
+      publish-enabled: ${{ steps.config.outputs.publish-enabled }}
+      skip-ci-marker: ${{ steps.config.outputs.skip-ci-marker }}
+      publish-marker: ${{ steps.config.outputs.publish-marker }}
 
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Read CI Config
+        id: config
+        uses: i2mint/wads/actions/read-ci-config@master
+        with:
+          pyproject-path: .
+
+  # Second job: Validation using the config
   validation:
     name: Validation
     if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    needs: setup
     runs-on: ubuntu-latest
-    env:
-      SSHDOL_SYNC_TO_EXTRA_SSH_OPTIONS: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
     strategy:
       matrix:
-        python-version: ["3.10"]
+        python-version: ${{ fromJson(needs.setup.outputs.python-versions) }}
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
+        uses: i2mint/wads/actions/setup-python-uv@master
         with:
           python-version: ${{ matrix.python-version }}
+
+      - name: Install System Dependencies
+        uses: i2mint/wads/actions/install-system-deps@master
+        with:
+          pyproject-path: .
 
       - name: Install Dependencies
-        uses: i2mint/isee/actions/install-packages@master
-        with:
-          dependency-files: setup.cfg
-          # ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}  # Uncomment this if you need to install private dependencies from source
+        uses: i2mint/wads/actions/install-deps-uv@master
 
-      - name: Create SSH Directory
-        run: mkdir -p ~/.ssh
-
-      - name: Write SSH Private Key
+      # sshdol's tests are integration tests against an SSH server. Instead of
+      # depending on an external server, we stand up an OpenSSH server on the CI
+      # runner itself and point the tests at it via a localhost ssh-config alias.
+      # This step must run AFTER deps are installed and BEFORE "Run Tests" so the
+      # exported env vars reach the pytest step.
+      - name: Setup localhost SSH server
         run: |
-          echo "${{ secrets.SSHDOL_CI_SSH_PRIVATE_KEY }}" > ~/.ssh/sshdol_ci_key
+          set -euxo pipefail
+          # Install and start the SSH server
+          sudo apt-get update
+          sudo apt-get install -y openssh-server
+          sudo systemctl start ssh || sudo service ssh start
 
-      - name: Set SSH Key Permissions
-        run: chmod 600 ~/.ssh/sshdol_ci_key
+          # Generate a dedicated key pair and authorize it for the runner user
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh-keygen -t ed25519 -f ~/.ssh/sshdol_ci_key -N "" -q
+          cat ~/.ssh/sshdol_ci_key.pub >> ~/.ssh/authorized_keys
+          chmod 600 ~/.ssh/authorized_keys
 
-      # - name: Add remote host key to known_hosts
-      #   run: |
-      #     ssh-keyscan -p 22 ${{ secrets.SSH_TEST_HOST }} >> ~/.ssh/known_hosts
+          # SSH config alias the tests connect through ("sshdol_server")
+          cat >> ~/.ssh/config <<EOF
+          Host sshdol_server
+            HostName localhost
+            User $(whoami)
+            IdentityFile ~/.ssh/sshdol_ci_key
+            StrictHostKeyChecking no
+            UserKnownHostsFile /dev/null
+          EOF
+          chmod 600 ~/.ssh/config
 
-      - name: Create SSH Config File
-        run: |
-          echo "Host sshdol_server" >> ~/.ssh/config
-          echo "  HostName 164.92.79.155" >> ~/.ssh/config
-          echo "  User sshdol_ci" >> ~/.ssh/config
-          echo "  IdentityFile ~/.ssh/sshdol_ci_key" >> ~/.ssh/config
+          # Test rootdir on the runner
+          mkdir -p "$HOME/sshdol_ci_tests"
+
+          # Export config to subsequent steps (the pytest step)
+          echo "SSH_TEST_HOST=sshdol_server" >> "$GITHUB_ENV"
+          echo "SSH_TEST_ROOTDIR=$HOME/sshdol_ci_tests" >> "$GITHUB_ENV"
+          # sync_to() uses rsync-over-ssh; disable host-key prompts for localhost
+          echo "SSHDOL_SYNC_TO_EXTRA_SSH_OPTIONS=-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" >> "$GITHUB_ENV"
+
+          # Sanity check: prove the alias resolves and auth works
+          ssh -F ~/.ssh/config sshdol_server 'echo OK && whoami'
 
       - name: Format Source Code
-        uses: i2mint/isee/actions/format-source-code@master
+        if: needs.setup.outputs.ruff-enabled != 'false'
+        run: uvx ruff format .
 
-      - name: Pylint Validation
-        uses: i2mint/isee/actions/pylint-validation@master
+      - name: Format Source Code (black)
+        if: needs.setup.outputs.black-enabled == 'true'
+        run: uvx black .
+
+      - name: Lint Validation
+        if: needs.setup.outputs.ruff-enabled != 'false'
+        run: uvx ruff check --output-format=github ${{ needs.setup.outputs.project-name }}
+
+      - name: Type Check (mypy)
+        if: needs.setup.outputs.mypy-enabled == 'true'
+        run: uvx mypy ${{ needs.setup.outputs.project-name }}
+
+      - name: Run Tests
+        if: needs.setup.outputs.tests-enabled != 'false'
+        uses: i2mint/wads/actions/run-tests-uv@master
         with:
-          root-dir: ${{ env.PROJECT_NAME }}
-          enable: missing-module-docstring
-          ignore: tests,examples,scrap
+          root-dir: ${{ needs.setup.outputs.project-name }}
+          pytest-args: ${{ needs.setup.outputs.pytest-args }}
+          exclude-paths: ${{ needs.setup.outputs.exclude-paths }}
+          coverage: ${{ needs.setup.outputs.coverage-enabled }}
 
-      - name: Pytest Validation
-        uses: i2mint/isee/actions/pytest-validation@master
+      - name: Track Code Metrics
+        if: needs.setup.outputs.metrics-enabled == 'true'
+        uses: i2mint/umpyre/actions/track-metrics@master
+        continue-on-error: true
         with:
-          root-dir: ${{ env.PROJECT_NAME }}
-          paths-to-ignore: examples,scrap
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          config-path: ${{ needs.setup.outputs.metrics-config-path }}
+          storage-branch: ${{ needs.setup.outputs.metrics-storage-branch }}
+          python-version: ${{ needs.setup.outputs.metrics-python-version }}
+          force-run: ${{ needs.setup.outputs.metrics-force-run }}
 
+  # Publishing job
+  #
+  # Gated by [tool.wads.ci.publish] in pyproject.toml (read via the setup job):
+  #   - skip-ci-marker  : when publishing is enabled, a commit message containing
+  #                       this substring skips the publish job (default "[skip ci]").
+  #   - publish-enabled : whether publishing runs at all (default true).
+  #   - publish-marker  : when publishing is disabled, a commit message containing
+  #                       this substring forces the publish job (default "[publish]").
+  # The publish-enabled check uses `== 'true'` (fail-closed): if an older wads
+  # without these outputs is installed by read-ci-config, publishing is skipped
+  # rather than run unintentionally.
   publish:
     name: Publish
-    if: "!contains(github.event.head_commit.message, '[skip ci]') && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')"
-    needs: validation
+    permissions:
+      contents: write
+    if: "!contains(github.event.head_commit.message, needs.setup.outputs.skip-ci-marker) && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && (needs.setup.outputs.publish-enabled == 'true' || contains(github.event.head_commit.message, needs.setup.outputs.publish-marker))"
+    needs: [setup, validation]
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.10"]
+
     steps:
-      - uses: actions/checkout@v3
+      # `actions/checkout@v6` defaults to persist-credentials: true, configuring
+      # HTTPS auth in .git/config using `secrets.GITHUB_TOKEN`. Together with the
+      # job-level `permissions: contents: write`, this is exactly what the
+      # post-publish push-back needs — no per-repo SSH deploy key required. Do
+      # NOT re-add a "Force SSH for git remote" step: rewriting origin to an
+      # SSH URL overrides these credentials and reintroduces the push-back
+      # failure on every repo lacking an SSH_PRIVATE_KEY deploy key.
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Set up Python
+        uses: i2mint/wads/actions/setup-python-uv@master
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: ${{ fromJson(needs.setup.outputs.python-versions)[0] }}
+          create-venv: "false"
 
       - name: Format Source Code
-        uses: i2mint/isee/actions/format-source-code@master
+        if: needs.setup.outputs.ruff-enabled != 'false'
+        run: uvx ruff format .
+
+      - name: Format Source Code (black)
+        if: needs.setup.outputs.black-enabled == 'true'
+        run: uvx black .
 
       - name: Update Version Number
+        id: version
         uses: i2mint/isee/actions/bump-version-number@master
 
-      - name: Package
-        uses: i2mint/isee/actions/package@master
-        # Uncomment this if you need to install private dependencies from source
-        # with:  
-          # ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}  
-
-      - name: Publish
-        uses: i2mint/isee/actions/publish@master
+      - name: Build Distribution
+        uses: i2mint/wads/actions/build-dist-uv@master
         with:
-          pypi-username: ${{ secrets.PYPI_USERNAME }}
-          pypi-password: ${{ secrets.PYPI_PASSWORD }}
+          sdist: ${{ needs.setup.outputs.build-sdist }}
+          wheel: ${{ needs.setup.outputs.build-wheel }}
 
-      - name: Check In
-        uses: i2mint/isee/actions/check-in@master
+      - name: Publish to PyPI
+        uses: i2mint/wads/actions/pypi-publish-uv@master
         with:
-          commit-message: "**CI** Formatted code + Updated version number and documentation. [skip ci]"
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          pypi-token: ${{ secrets.PYPI_PASSWORD }}
 
-      - name: Tag Repository With New Version Number
-        uses: i2mint/isee/actions/tag-repository@master
+      - name: Commit Changes
+        uses: i2mint/wads/actions/git-commit@master
         with:
-          tag: $VERSION
+          commit-message: "**CI** Formatted code + Updated version to ${{ env.VERSION }} [skip ci]"
+          push: true
 
+      - name: Tag Repository
+        uses: i2mint/wads/actions/git-tag@master
+        with:
+          tag: ${{ env.VERSION }}
+          message: "Release version ${{ env.VERSION }}"
+          push: true
+
+  # Optional GitHub Pages (skipped when [tool.wads.ci.docs].enabled = false)
+  # Depends on validation (not publish) so docs still publish when the publish
+  # job is disabled via [tool.wads.ci.publish].enabled = false.
   github-pages:
     name: Publish GitHub Pages
-    if: "!contains(github.event.head_commit.message, '[skip ci]') && github.ref == 'refs/heads/master'"
-    needs: publish
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    if: "!contains(github.event.head_commit.message, '[skip ci]') && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && needs.setup.outputs.docs-enabled != 'false'"
+    needs: [setup, validation]
     runs-on: ubuntu-latest
+
     steps:
+      # Check out first so install-system-deps can read [tool.wads.ops.*] from
+      # pyproject.toml. The epythet action self-checks-out again internally;
+      # apt-installed system deps persist across that re-checkout.
+      - uses: actions/checkout@v6
+
+      - name: Install System Dependencies
+        uses: i2mint/wads/actions/install-system-deps@master
+        with:
+          pyproject-path: .
+
       - uses: i2mint/epythet/actions/publish-github-pages@master
         with:
-          # IMPORTANT Note: You don't need to specify GITHUB_TOKEN in your repo secrets.
-          # GITHUB_TOKEN is special & automatically provided to your workflow run.
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          ignore: "tests/,scrap/,examples/"
