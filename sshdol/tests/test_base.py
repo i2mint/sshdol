@@ -1,5 +1,6 @@
 """Test base module for sshdol."""
 
+import os
 import socket
 import pytest
 from sshdol.base import SshFiles, get_ssh_config_for_host
@@ -37,6 +38,10 @@ def _ssh_available(*, connect_timeout=3):
         list(store)
         return True
     except Exception:
+        # When a test server was configured explicitly (as in CI), a failure to
+        # connect is a test failure, not a reason to skip the whole module.
+        if "SSH_TEST_HOST" in os.environ:
+            raise
         return False
 
 

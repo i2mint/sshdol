@@ -110,8 +110,8 @@ class RejectUnknownHostKey(paramiko.RejectPolicy):
         raise paramiko.SSHException(
             f"The host key of {hostname!r} is not in known_hosts, so the connection "
             "was refused. Verify and record it by connecting once with `ssh`, set "
-            "StrictHostKeyChecking in your ssh config for this host, or pass "
-            "missing_host_key_policy=paramiko.AutoAddPolicy to accept unknown keys."
+            "`StrictHostKeyChecking accept-new` in your ssh config for this host, or "
+            "pass missing_host_key_policy=paramiko.AutoAddPolicy to accept unknown keys."
         )
 
 
@@ -145,15 +145,90 @@ def resolve_host_key_policy(missing_host_key_policy=None, ssh_config=None):
     return RejectUnknownHostKey()
 
 
-def _known_hosts_files(ssh_config=None):
+_DFLT_GLOBAL_KNOWN_HOSTS = "/etc/ssh/ssh_known_hosts /etc/ssh/ssh_known_hosts2"
+_DFLT_USER_KNOWN_HOSTS = "~/.ssh/known_hosts ~/.ssh/known_hosts2"
+
+
+def _config_file_list(value, default):
+    if value is None:
+        value = default
+    if isinstance(value, (list, tuple)):
+        value = " ".join(value)
+    return value.split()
+
+
+def known_hosts_files(ssh_config=None):
+    """The known_hosts files that apply, as OpenSSH chooses them.
+
+    ``GlobalKnownHostsFile`` / ``UserKnownHostsFile`` from the host's ssh config
+    replace the defaults (``/dev/null`` or ``none`` means "no file").
+    Only existing files are returned.
+    """
+    ssh_config = ssh_config or {}
+    files = _config_file_list(
+        ssh_config.get("globalknownhostsfile"), _DFLT_GLOBAL_KNOWN_HOSTS
+    ) + _config_file_list(ssh_config.get("userknownhostsfile"), _DFLT_USER_KNOWN_HOSTS)
     files = [
-        "/etc/ssh/ssh_known_hosts",
-        os.path.expanduser("~/.ssh/known_hosts"),
+        os.path.expanduser(f) for f in files if f.lower() not in _NULL_KNOWN_HOSTS_FILES
     ]
-    for f in (ssh_config or {}).get("userknownhostsfile", "").split():
-        if f.lower() not in _NULL_KNOWN_HOSTS_FILES:
-            files.append(os.path.expanduser(f))
     return [f for f in files if os.path.isfile(f)]
+
+
+def read_known_hosts(files) -> paramiko.HostKeys:
+    """Parse known_hosts ``files`` leniently into a ``paramiko.HostKeys``.
+
+    Lines paramiko can't use (``@cert-authority`` / ``@revoked`` markers, key types
+    it doesn't support, malformed or undecodable lines) are skipped instead of
+    aborting the whole file. Note that ``@revoked`` entries are therefore not
+    honoured.
+    """
+    host_keys = paramiko.HostKeys()
+    for path in files:
+        try:
+            with open(path, "rb") as f:
+                raw_lines = f.read().splitlines()
+        except OSError:
+            continue
+        for lineno, raw in enumerate(raw_lines, 1):
+            try:
+                line = raw.decode("utf-8").strip()
+                if not line or line.startswith(("#", "@")):
+                    continue
+                entry = paramiko.hostkeys.HostKeyEntry.from_line(line, lineno)
+            except Exception:
+                continue
+            if entry is None:
+                continue
+            for hostname in entry.hostnames:
+                host_keys.add(hostname, entry.key.get_name(), entry.key)
+    return host_keys
+
+
+def _host_key_lookup_name(hostname, port=22):
+    return hostname if int(port) == 22 else f"[{hostname}]:{port}"
+
+
+def _seed_host_keys(client, known, *, hostname, port=22, alias=None):
+    """Add the known keys for this server to ``client``, under the name paramiko checks.
+
+    Besides every known_hosts entry, the entries recorded under ``HostKeyAlias`` (if
+    configured) or under the lower-cased host name are copied to the exact name
+    paramiko will look up, as OpenSSH would match them.
+    """
+    client_keys = client.get_host_keys()
+    for name in known.keys():
+        for key_type, key in known[name].items():
+            client_keys.add(name, key_type, key)
+    if not hostname:
+        return
+    lookup_name = _host_key_lookup_name(hostname, port)
+    if alias:
+        candidates = [alias, _host_key_lookup_name(alias, port)]
+    else:
+        candidates = [lookup_name.lower()]
+    for candidate in candidates:
+        for key_type, key in (known.lookup(candidate) or {}).items():
+            client_keys.add(lookup_name, key_type, key)
 
 
 def split_path(path: str) -> tuple[str, str]:
@@ -217,6 +292,7 @@ class SshFilesReader(Mapping):
         strict_contains=False,  # Whether to raise KeyError or return False for deep paths in __contains__
         allow_escape=False,  # Whether keys may point outside rootdir (absolute or ``..``)
         missing_host_key_policy=None,  # paramiko policy for unknown host keys (see below)
+        _pinned_host_key=None,  # internal: (name, key) a parent instance connected with
     ):
         """
         Initialize an SSH connection with read-only file access.
@@ -288,20 +364,20 @@ class SshFilesReader(Mapping):
         )
 
         # Initialize the SSH connection
-        ssh_config = get_ssh_config_for_host(host) if host else {}
+        if host and not all([user, url]):
+            ssh_config = get_ssh_config_for_host(host)
+        else:
+            try:  # only needed for host-key options here; don't fail on a bad config
+                ssh_config = get_ssh_config_for_host(host) if host else {}
+            except Exception:
+                ssh_config = {}
         self._ssh = paramiko.SSHClient()
-        for known_hosts_file in _known_hosts_files(ssh_config):
-            try:
-                self._ssh.load_system_host_keys(known_hosts_file)
-            except (OSError, paramiko.SSHException):
-                pass  # an unreadable known_hosts file just contributes no keys
         self._ssh.set_missing_host_key_policy(
             resolve_host_key_policy(missing_host_key_policy, ssh_config)
         )
 
         # If a host alias is provided, try to get config from SSH config file
         if host and not all([user, url]):
-
             # Use values from config if not explicitly provided
             user = user or ssh_config.get("user")
             url = url or ssh_config.get("hostname")
@@ -323,11 +399,32 @@ class SshFilesReader(Mapping):
                     key_filename = expanded_path
                     break
 
+        # Known host keys (and, for a subdirectory instance, the key its parent saw)
+        _seed_host_keys(
+            self._ssh,
+            read_known_hosts(known_hosts_files(ssh_config)),
+            hostname=url,
+            port=port,
+            alias=ssh_config.get("hostkeyalias"),
+        )
+        if _pinned_host_key is not None:
+            pinned_name, pinned_key = _pinned_host_key
+            self._ssh.get_host_keys().add(
+                pinned_name, pinned_key.get_name(), pinned_key
+            )
+
         # Connect using appropriate authentication method
         if key_filename:
             self._ssh.connect(url, port=port, username=user, key_filename=key_filename)
         else:
             self._ssh.connect(url, port=port, username=user, password=password)
+
+        # Remember the server key, so subdirectory instances (new connections) must
+        # see the same one rather than trusting a new key on first use again.
+        self._pinned_host_key = (
+            _host_key_lookup_name(url, port),
+            self._ssh.get_transport().get_remote_server_key(),
+        )
 
         self._sftp = self._ssh.open_sftp()
         self.rootdir = rootdir
@@ -348,6 +445,8 @@ class SshFilesReader(Mapping):
     def _key_to_path(self, k):
         """Normalize key ``k`` to a path, refusing (``KeyError``) one that leaves rootdir."""
         path = normalize_path(k)
+        if "\x00" in path:
+            raise KeyError(f"Key contains a NUL character: {k!r}")
         if not getattr(self, "_allow_escape", False) and escapes_root(path):
             raise KeyError(
                 f"Key points outside rootdir (pass allow_escape=True to allow): {k}"
@@ -520,7 +619,11 @@ class SshFilesReader(Mapping):
                     )
 
                 # Create a completely new connection for the subdirectory
-                new_instance = type(self)(**params, rootdir=new_rootdir)
+                new_instance = type(self)(
+                    **params,
+                    rootdir=new_rootdir,
+                    _pinned_host_key=getattr(self, "_pinned_host_key", None),
+                )
                 return new_instance
 
             # Try to open as a file
@@ -550,7 +653,11 @@ class SshFilesReader(Mapping):
                 )
 
             # Create a completely new connection for the subdirectory
-            new_instance = type(self)(**params, rootdir=new_rootdir)
+            new_instance = type(self)(
+                **params,
+                rootdir=new_rootdir,
+                _pinned_host_key=getattr(self, "_pinned_host_key", None),
+            )
             return new_instance
 
         # If it's a file, return its contents
