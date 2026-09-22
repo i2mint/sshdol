@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "built_at": "2026-09-22T16:35:00Z",
+  "package": {
+    "name": "sshdol",
+    "version": "0.0.9",
+    "display_name": "sshdol",
+    "source": "pyproject.toml"
+  },
+  "git": {
+    "available": true,
+    "commit": "41be0cad7620e925aa25f6316c439ff80d2be24b",
+    "short_commit": "41be0ca",
+    "branch": "master",
+    "tags": [],
+    "dirty": false,
+    "remote_url": "https://github.com/i2mint/sshdol",
+    "commit_url": "https://github.com/i2mint/sshdol/commit/41be0cad7620e925aa25f6316c439ff80d2be24b",
+    "error": null
+  },
+  "ci": {
+    "provider": "github",
+    "repository": "i2mint/sshdol",
+    "sha": "41be0cad7620e925aa25f6316c439ff80d2be24b",
+    "sha_in_history": true,
+    "ref": "refs/heads/master",
+    "ref_name": "master",
+    "run_id": "35754936337",
+    "run_url": "https://github.com/i2mint/sshdol/actions/runs/35754936337",
+    "server_url": "https://github.com"
+  },
+  "tools": {
+    "epythet": "0.2.12",
+    "sphinx": "9.1.0",
+    "docutils": "0.22.4",
+    "python": "3.12.14"
+  },
+  "config": {
+    "theme": "auto",
+    "html_theme": "furo",
+    "accent": "#824800",
+    "mode": "auto",
+    "api_generator": "autosummary",
+    "ignore": [
+      "tests/",
+      "scrap/",
+      "examples/"
+    ],
+    "agent_outputs": true,
+    "aggregates": [
+      "md"
+    ],
+    "ai_artifacts": true,
+    "provenance": true,
+    "docs_dir": "docsrc"
+  },
+  "site": {
+    "modules_documented": 2,
+    "objects_documented": 15
+  },
+  "pypi": {
+    "checked": true,
+    "latest": "0.0.10",
+    "relation": "behind",
+    "error": null
+  },
+  "reproduce": "git clone https://github.com/i2mint/sshdol && cd sshdol\ngit checkout 41be0cad7620e925aa25f6316c439ff80d2be24b\npip install \"epythet==0.2.12\"\nepythet quickstart . --ignore tests/ scrap/ examples/",
+  "warnings": [],
+  "alignment": {
+    "aligned": false,
+    "notes": [
+      "The documented version (0.0.9) is behind the latest release on PyPI (0.0.10): `pip install sshdol` gives newer code than these docs describe."
+    ]
+  }
+}

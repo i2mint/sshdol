@@ -1,0 +1,28 @@
+sshdol.base
+===========
+
+.. automodule:: sshdol.base
+
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+   
+      escapes_root
+      get_ssh_config_for_host
+      known_hosts_files
+      normalize_path
+      read_known_hosts
+      resolve_host_key_policy
+      split_path
+   
+   .. rubric:: Classes
+
+   .. autosummary::
+   
+      RejectUnknownHostKey
+      SshFiles
+      SshFilesReader
+      SshTextFiles
+      SshTextFilesReader
+   

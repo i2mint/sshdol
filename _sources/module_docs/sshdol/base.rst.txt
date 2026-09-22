@@ -1,4 +1,0 @@
-sshdol.base
-===========
-.. automodule:: sshdol.base
-   :members:

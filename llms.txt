@@ -1,0 +1,21 @@
+# sshdol
+
+> Easy dict-like access to server files
+
+
+## Pages
+
+- [sshdol](index.html.md): A Python dict-like interface to SSH files, built on dol (Data Object Layer).
+- [API reference](api.html.md): | &#96;sshdol&#96;   | SSH-based file access with Mapping interface.   |
+- [sshdol](_autosummary/sshdol.html.md): SSH-based file access with Mapping interface.
+- [sshdol.base](_autosummary/sshdol.base.html.md): Base functionality for sshdol.
+- [For AI agents](ai-agents.html.md): &#96;sshdol&#96; ships artifacts for coding agents alongside its code. This page lists
+- [About this build](about-this-build.html.md): This documentation was built on &#42;&#42;2026-09-22 16:35 UTC&#42;&#42; from commit &lt;a href="https://github.com/i2m...
+
+## Optional
+
+- [sshdol.md](sshdol.md): Complete documentation in a single file.
+
+## Build
+
+- [build_info.json](build_info.json): build provenance (commit, version, tool versions, whether the docs match the package)

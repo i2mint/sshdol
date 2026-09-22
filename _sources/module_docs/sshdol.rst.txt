@@ -1,4 +1,0 @@
-sshdol
-======
-.. automodule:: sshdol
-   :members:

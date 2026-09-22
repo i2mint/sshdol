@@ -1,0 +1,13 @@
+# sshdol
+
+> Easy dict-like access to server files
+
+
+## Pages in this subsection
+
+- [sshdol](sshdol.html.md): SSH-based file access with Mapping interface.
+- [sshdol.base](sshdol.base.html.md): Base functionality for sshdol.
+
+## Optional
+
+- [Top-level llms.txt](../llms.txt): Complete documentation index.

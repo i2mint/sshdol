@@ -1,4 +1,0 @@
-sshdol.tests
-============
-.. automodule:: sshdol.tests
-   :members:
