@@ -31,6 +31,8 @@ def _ssh_available(*, connect_timeout=3):
         with socket.create_connection((hostname, port), timeout=connect_timeout):
             pass
     except OSError:
+        if "SSH_TEST_HOST" in os.environ:  # explicitly configured (as in CI): fail
+            raise
         return False
     # Reachable — confirm we can actually open the store and do a trivial op.
     try:

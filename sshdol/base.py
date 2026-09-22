@@ -197,10 +197,10 @@ def read_known_hosts(files) -> paramiko.HostKeys:
                 entry = paramiko.hostkeys.HostKeyEntry.from_line(line, lineno)
             except Exception:
                 continue
-            if entry is None:
-                continue
-            for hostname in entry.hostnames:
-                host_keys.add(hostname, entry.key.get_name(), entry.key)
+            if entry is not None:
+                # Append directly (as HostKeys.load does): HostKeys.add rescans all
+                # entries on every call, which is quadratic for large files.
+                host_keys._entries.append(entry)
     return host_keys
 
 
@@ -211,21 +211,16 @@ def _host_key_lookup_name(hostname, port=22):
 def _seed_host_keys(client, known, *, hostname, port=22, alias=None):
     """Add the known keys for this server to ``client``, under the name paramiko checks.
 
-    Besides every known_hosts entry, the entries recorded under ``HostKeyAlias`` (if
-    configured) or under the lower-cased host name are copied to the exact name
-    paramiko will look up, as OpenSSH would match them.
+    Only the entries that apply to this server are copied: those recorded under the
+    name paramiko looks up, its lower-cased form, or ``HostKeyAlias`` (if set).
     """
-    client_keys = client.get_host_keys()
-    for name in known.keys():
-        for key_type, key in known[name].items():
-            client_keys.add(name, key_type, key)
     if not hostname:
         return
+    client_keys = client.get_host_keys()
     lookup_name = _host_key_lookup_name(hostname, port)
+    candidates = [lookup_name, lookup_name.lower()]
     if alias:
         candidates = [alias, _host_key_lookup_name(alias, port)]
-    else:
-        candidates = [lookup_name.lower()]
     for candidate in candidates:
         for key_type, key in (known.lookup(candidate) or {}).items():
             client_keys.add(lookup_name, key_type, key)
