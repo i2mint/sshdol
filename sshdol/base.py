@@ -29,6 +29,7 @@ import shutil
 import sys
 import paramiko
 from functools import lru_cache
+import posixpath
 import shlex
 
 # Make a DFLT_RECYCLE_BIN
@@ -84,6 +85,75 @@ def normalize_path(path: str) -> str:
 
     # Normalize path separators to forward slashes
     return path.replace("\\", "/")
+
+
+def escapes_root(path: str) -> bool:
+    """Whether a (normalized, ``/``-separated) key path points outside the root.
+
+    >>> escapes_root('a/b.txt'), escapes_root('a/../b'), escapes_root('')
+    (False, False, False)
+    >>> escapes_root('..'), escapes_root('a/../../b'), escapes_root('/etc/x')
+    (True, True, True)
+    """
+    if not path:
+        return False
+    if path.startswith("/"):
+        return True
+    normalized = posixpath.normpath(path)
+    return normalized == ".." or normalized.startswith("../")
+
+
+class RejectUnknownHostKey(paramiko.RejectPolicy):
+    """Refuse hosts whose key is not in known_hosts, with a message saying what to do."""
+
+    def missing_host_key(self, client, hostname, key):
+        raise paramiko.SSHException(
+            f"The host key of {hostname!r} is not in known_hosts, so the connection "
+            "was refused. Verify and record it by connecting once with `ssh`, set "
+            "StrictHostKeyChecking in your ssh config for this host, or pass "
+            "missing_host_key_policy=paramiko.AutoAddPolicy to accept unknown keys."
+        )
+
+
+_SSH_CONFIG_AUTO_ADD_VALUES = {"no", "off", "accept-new"}
+_NULL_KNOWN_HOSTS_FILES = {"/dev/null", "none"}
+
+
+def resolve_host_key_policy(missing_host_key_policy=None, ssh_config=None):
+    """The paramiko policy for hosts whose key is not in ``known_hosts``.
+
+    An explicit ``missing_host_key_policy`` (a paramiko policy class or instance)
+    wins. Otherwise the host's ssh config decides: ``StrictHostKeyChecking`` set
+    to ``no``/``off``/``accept-new`` accepts (and remembers for the session) an
+    unknown key; anything else rejects it, as a non-interactive ``ssh`` would.
+    A key that *changed* is always refused by paramiko.
+
+    >>> type(resolve_host_key_policy()).__name__
+    'RejectUnknownHostKey'
+    >>> type(resolve_host_key_policy(ssh_config={'stricthostkeychecking': 'accept-new'})).__name__
+    'AutoAddPolicy'
+    >>> type(resolve_host_key_policy(paramiko.AutoAddPolicy)).__name__
+    'AutoAddPolicy'
+    """
+    if missing_host_key_policy is not None:
+        if isinstance(missing_host_key_policy, type):
+            missing_host_key_policy = missing_host_key_policy()
+        return missing_host_key_policy
+    strict = str((ssh_config or {}).get("stricthostkeychecking", "")).lower()
+    if strict in _SSH_CONFIG_AUTO_ADD_VALUES:
+        return paramiko.AutoAddPolicy()
+    return RejectUnknownHostKey()
+
+
+def _known_hosts_files(ssh_config=None):
+    files = [
+        "/etc/ssh/ssh_known_hosts",
+        os.path.expanduser("~/.ssh/known_hosts"),
+    ]
+    for f in (ssh_config or {}).get("userknownhostsfile", "").split():
+        if f.lower() not in _NULL_KNOWN_HOSTS_FILES:
+            files.append(os.path.expanduser(f))
+    return [f for f in files if os.path.isfile(f)]
 
 
 def split_path(path: str) -> tuple[str, str]:
@@ -145,6 +215,8 @@ class SshFilesReader(Mapping):
         max_levels=0,
         create_dirs=False,  # Only relevant for writable stores
         strict_contains=False,  # Whether to raise KeyError or return False for deep paths in __contains__
+        allow_escape=False,  # Whether keys may point outside rootdir (absolute or ``..``)
+        missing_host_key_policy=None,  # paramiko policy for unknown host keys (see below)
     ):
         """
         Initialize an SSH connection with read-only file access.
@@ -171,6 +243,16 @@ class SshFilesReader(Mapping):
             strict_contains: If True, __contains__ will raise KeyError for paths beyond max_levels
                             If False (default), it will return False for such paths
                             Design notes: https://github.com/i2mint/sshdol/issues/1#issuecomment-2714508482
+            allow_escape: If False (default), keys are confined to ``rootdir``:
+                       absolute keys and keys whose ``..`` segments leave it raise
+                       ``KeyError`` (and ``in`` returns False). Symbolic links on
+                       the server are not resolved by this check.
+            missing_host_key_policy: What to do when the server's host key is not
+                       in ``known_hosts`` (system, user, or the config's
+                       ``UserKnownHostsFile``). Default: follow the host's ssh
+                       config ``StrictHostKeyChecking`` (``no``/``accept-new`` accept
+                       the key), else refuse to connect. Pass e.g.
+                       ``paramiko.AutoAddPolicy`` to accept unknown keys.
         """
         # Store initialization parameters
         self._init_params = {
@@ -187,6 +269,8 @@ class SshFilesReader(Mapping):
             "max_levels": max_levels,
             "create_dirs": create_dirs,
             "strict_contains": strict_contains,
+            "allow_escape": allow_escape,
+            "missing_host_key_policy": missing_host_key_policy,
         }
 
         # Store configuration options
@@ -197,18 +281,26 @@ class SshFilesReader(Mapping):
         self._include_hidden = include_hidden
         self._include_directories = include_directories  # Store the new parameter
         self._dir_access = dir_access  # Store the new parameter
+        self._allow_escape = allow_escape
 
         assert self._encoding is None or isinstance(self._encoding, str), (
             "Encoding must be a string"
         )
 
         # Initialize the SSH connection
+        ssh_config = get_ssh_config_for_host(host) if host else {}
         self._ssh = paramiko.SSHClient()
-        self._ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        for known_hosts_file in _known_hosts_files(ssh_config):
+            try:
+                self._ssh.load_system_host_keys(known_hosts_file)
+            except (OSError, paramiko.SSHException):
+                pass  # an unreadable known_hosts file just contributes no keys
+        self._ssh.set_missing_host_key_policy(
+            resolve_host_key_policy(missing_host_key_policy, ssh_config)
+        )
 
         # If a host alias is provided, try to get config from SSH config file
         if host and not all([user, url]):
-            ssh_config = get_ssh_config_for_host(host)
 
             # Use values from config if not explicitly provided
             user = user or ssh_config.get("user")
@@ -252,6 +344,15 @@ class SshFilesReader(Mapping):
             except OSError:
                 # If directory doesn't exist, don't error - it will be handled by operations
                 pass
+
+    def _key_to_path(self, k):
+        """Normalize key ``k`` to a path, refusing (``KeyError``) one that leaves rootdir."""
+        path = normalize_path(k)
+        if not getattr(self, "_allow_escape", False) and escapes_root(path):
+            raise KeyError(
+                f"Key points outside rootdir (pass allow_escape=True to allow): {k}"
+            )
+        return path
 
     def _is_dir(self, path):
         """Check if a path is a directory"""
@@ -383,7 +484,7 @@ class SshFilesReader(Mapping):
         Supports path-based keys with slashes for nested files.
         Respects max_levels constraint for reading.
         """
-        path = normalize_path(k)
+        path = self._key_to_path(k)
 
         # Check if path exceeds allowed depth
         self._check_path_depth(path)
@@ -532,7 +633,10 @@ class SshFilesReader(Mapping):
 
         See https://github.com/i2mint/sshdol/issues/1#issuecomment-2714508482
         """
-        path = normalize_path(k)
+        try:
+            path = self._key_to_path(k)
+        except KeyError:
+            return False
 
         # Check if path exceeds allowed depth
         if self._max_levels is not None and path.count("/") > self._max_levels:
@@ -627,7 +731,7 @@ class SshFiles(SshFilesReader, MutableMapping):
         Respects max_levels constraint for writing.
         """
         # Check if path exceeds allowed depth
-        path = normalize_path(k)
+        path = self._key_to_path(k)
         self._check_path_depth(path)
 
         # Handle encoding based on the _encoding attribute
@@ -661,7 +765,7 @@ class SshFiles(SshFilesReader, MutableMapping):
         """
         Delete a file on the SSH server.
         """
-        path = normalize_path(k)
+        path = self._key_to_path(k)
 
         if not self._path_exists(path):
             raise KeyError(k)
@@ -695,7 +799,7 @@ class SshFiles(SshFilesReader, MutableMapping):
         Raises:
             KeyError: If directory cannot be created
         """
-        path = normalize_path(path)
+        path = self._key_to_path(path)
 
         # Check if directory already exists
         if self._path_exists(path):
