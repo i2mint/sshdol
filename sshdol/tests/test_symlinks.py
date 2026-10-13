@@ -162,3 +162,38 @@ def test_sync_to_refuses_link_following_args(stores, tmp_path, flag):
     store, _, _ = stores
     with pytest.raises(ValueError, match="allow_escape"):
         sync_to(store, tmp_path / "d", extra_args=[flag])
+
+
+# ---- sync_to subdir with characters rsync would split (i2mint/sshdol#12) ----------------
+
+
+@pytest.mark.parametrize("name", ["my dir", "a;b $x", "quote'd", "ünï cödé"])
+def test_sync_to_subdir_with_unusual_characters(stores, tmp_path, name):
+    from sshdol.base import PROTECT_ARGS_MIN_RSYNC, local_rsync_version
+
+    if local_rsync_version() < PROTECT_ARGS_MIN_RSYNC:
+        pytest.skip("needs rsync >= 3.2.4")
+    store, sftp, _ = stores
+    sftp.mkdir(BASE + "/root/" + name)
+    with sftp.file(BASE + "/root/" + name + "/f.txt", "wb") as f:
+        f.write(b"in " + name.encode())
+    sync_to(store, tmp_path / "d", subdir=name)
+    assert (tmp_path / "d" / "f.txt").read_bytes() == b"in " + name.encode()
+    assert not (tmp_path / "d" / "sub").exists()  # only the subdir was synced
+
+
+def test_sync_to_subdir_unusual_characters_refused_on_old_rsync(
+    stores, tmp_path, monkeypatch
+):
+    import sshdol.base as base
+
+    monkeypatch.setattr(base, "local_rsync_version", lambda: (3, 1, 3))
+    store, _, _ = stores
+    with pytest.raises(ValueError, match="3.2.4"):
+        sync_to(store, tmp_path / "d", subdir="my dir")
+
+
+def test_sync_to_subdir_control_characters_refused(stores, tmp_path):
+    store, _, _ = stores
+    with pytest.raises(ValueError, match="control"):
+        sync_to(store, tmp_path / "d", subdir="a\nb")
