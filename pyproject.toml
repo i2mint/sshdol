@@ -33,7 +33,7 @@ classifiers = [
 ]
 dependencies = [
     "paramiko",
-    "dol>=0.3.59",  # inner_most_key (sshdol.ops)
+    "dol>=0.3.81",  # inner_most_key, key_in_scope (sshdol.ops)
 ]
 
 [project.urls]

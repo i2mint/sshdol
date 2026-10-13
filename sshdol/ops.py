@@ -21,16 +21,15 @@ caller's own store.
 >>> view = KeyCodecs.prefixed("sub/")(SshFiles(host="myserver"))  # doctest: +SKIP
 >>> mkdir(view, "newdir")  # creates rootdir/sub/newdir  # doctest: +SKIP
 
-What stays outside the reach of :func:`mkdir`, stated rather than hidden: a ``filt_iter``
-scope is not consulted before a directory is created (there is no non-writing scope probe
-for a key that does not exist yet), so the directory can be created outside the view.
+A ``filt_iter`` scope is honoured by :func:`mkdir` (``dol.key_in_scope``, i2mint/sshdol#12): a
+directory outside the view is not created.
 """
 
 from __future__ import annotations
 
 import os
 
-from dol import inner_most_key
+from dol import inner_most_key, key_in_scope
 
 from sshdol.base import (
     SshFiles,
@@ -60,13 +59,21 @@ def mkdir(store, path, *, exist_ok: bool = False) -> None:
     ``store[path] = ...`` would write. Returns nothing: index ``store[path]`` yourself for
     the sub-store (a value codec may not be able to decode a directory).
 
+    ``path`` must also be inside the scope of every ``filt_iter`` layer of ``store``, probed
+    with ``dol.key_in_scope`` as the key it is (``'sub/new'`` or ``'sub/new/'``, as the
+    caller wrote it): otherwise ``KeyError`` and nothing is created. (Limits of the probe:
+    see ``dol.key_in_scope``.)
+
     :param store: an ``SshFiles``, wrapped or not
     :param path: a key of ``store``
     :param exist_ok: if True, an existing directory is not an error
+    :raises KeyError: if ``path`` is outside the store's scope (or leaves ``rootdir``)
     """
     leaf = _leaf_of(store)
     if not isinstance(leaf, SshFiles):
         raise TypeError("mkdir needs a writable SshFiles, got a reader")
+    if not key_in_scope(store, path):
+        raise KeyError(f"Key not in store: {path}")
     inner = inner_most_key(store, path, default=None)
     if isinstance(inner, os.PathLike):
         inner = os.fspath(inner)
