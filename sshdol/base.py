@@ -104,7 +104,13 @@ def escapes_root(path: str) -> bool:
     return normalized == ".." or normalized.startswith("../")
 
 
-_LINK_FOLLOWING_RSYNC_ARGS = ("-L", "--copy-links", "--copy-unsafe-links", "-k", "--copy-dirlinks")
+_LINK_FOLLOWING_RSYNC_ARGS = (
+    "-L",
+    "--copy-links",
+    "--copy-unsafe-links",
+    "-k",
+    "--copy-dirlinks",
+)
 MAX_SYMLINK_HOPS = 40  # same order as the kernel's ELOOP limit
 
 
@@ -697,9 +703,7 @@ class SshFilesReader(Mapping):
         """
         if self._allow_escape:
             new_rootdir = (
-                path
-                if self.rootdir == "."
-                else f"{self.rootdir.rstrip('/')}/{path}"
+                path if self.rootdir == "." else f"{self.rootdir.rstrip('/')}/{path}"
             )
         else:
             new_rootdir = self._real_path(path)
