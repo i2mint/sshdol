@@ -279,7 +279,9 @@ def _resolve_sync_target(target) -> str:
     )
 
 
-_SAFE_SUBDIR = re.compile(r"^[\w./@%+=:,-]+$")  # no spaces/shell metacharacters (old rsyncs)
+_SAFE_SUBDIR = re.compile(
+    r"^[\w./@%+=:,-]+$"
+)  # no spaces/shell metacharacters (old rsyncs)
 
 
 class SshFilesReader(Mapping):
@@ -958,7 +960,9 @@ class SshFiles(SshFilesReader, MutableMapping):
         A method runs bound to the leaf, so under a ``dol`` key transform it received the
         caller's unmapped key and created the directory in the wrong place (i2mint/sshdol#6).
         """
-        raise AttributeError(_MOVED.format(old="mkdir", new="sshdol.ops.mkdir(store, path)"))
+        raise AttributeError(
+            _MOVED.format(old="mkdir", new="sshdol.ops.mkdir(store, path)")
+        )
 
     # -----------------------
     # High-performance syncs
@@ -971,7 +975,9 @@ class SshFiles(SshFilesReader, MutableMapping):
         tree (i2mint/sshdol#6).
         """
         raise AttributeError(
-            _MOVED.format(old="sync_to", new="sshdol.ops.sync_to(store, target, subdir=...)")
+            _MOVED.format(
+                old="sync_to", new="sshdol.ops.sync_to(store, target, subdir=...)"
+            )
         )
 
     def _sync_to(
