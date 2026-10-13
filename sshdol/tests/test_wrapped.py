@@ -229,3 +229,15 @@ def test_mkdir_scope_is_checked_in_each_layers_own_coordinates(leaf):
     assert leaf._sftp.made == []
     mkdir(view, "a1")
     assert leaf._sftp.made == ["sub", "sub/a1"]
+
+
+@pytest.mark.parametrize("key", ["sub/../other", "../other", "sub/a/../../other", "sub\\..\\other"])
+def test_mkdir_on_a_wrapped_store_refuses_dotdot_segments(leaf, key):
+    """A filter judges the spelling; '..' would resolve to a place the spelling hides."""
+    for view in (
+        filt_iter(leaf, filt=lambda k: k.startswith("sub")),
+        subdir_view(leaf),
+    ):
+        with pytest.raises(KeyError):
+            mkdir(view, key)
+    assert leaf._sftp.made == []

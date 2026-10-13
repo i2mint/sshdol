@@ -61,8 +61,11 @@ def mkdir(store, path, *, exist_ok: bool = False) -> None:
 
     ``path`` must also be inside the scope of every ``filt_iter`` layer of ``store``, probed
     with ``dol.key_in_scope`` as the key it is (``'sub/new'`` or ``'sub/new/'``, as the
-    caller wrote it): otherwise ``KeyError`` and nothing is created. (Limits of the probe:
-    see ``dol.key_in_scope``.)
+    caller wrote it): otherwise ``KeyError`` and nothing is created. The scope is judged on
+    the key *as spelled*: on a wrapped store a ``..`` segment is refused (it could resolve
+    to a place the spelling does not show), and symbolic links on the server are not
+    resolved for it (``rootdir`` confinement is). A predicate that cannot handle the key
+    raises its own error, as ``key_in_scope`` does (see its limits).
 
     :param store: an ``SshFiles``, wrapped or not
     :param path: a key of ``store``
@@ -72,6 +75,8 @@ def mkdir(store, path, *, exist_ok: bool = False) -> None:
     leaf = _leaf_of(store)
     if not isinstance(leaf, SshFiles):
         raise TypeError("mkdir needs a writable SshFiles, got a reader")
+    if store is not leaf and ".." in str(path).replace("\\", "/").split("/"):
+        raise KeyError(f"Key with '..' is not allowed on a wrapped store: {path}")
     if not key_in_scope(store, path):
         raise KeyError(f"Key not in store: {path}")
     inner = inner_most_key(store, path, default=None)
