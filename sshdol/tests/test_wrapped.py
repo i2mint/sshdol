@@ -179,8 +179,31 @@ def test_sync_to_explicit_subdir(leaf, rsync, tmp_path):
         sync_to(leaf, tmp_path / "d", subdir="../etc")
 
 
-@pytest.mark.parametrize("bad", ["a b", "x;rm -rf ~", "$(id)", "a`id`"])
-def test_sync_to_subdir_metacharacters_refused(leaf, rsync, tmp_path, bad):
+_METACHARACTER_SUBDIRS = ["a b", "x;rm -rf ~", "$(id)", "a`id`"]
+
+
+@pytest.mark.parametrize("bad", _METACHARACTER_SUBDIRS)
+def test_sync_to_subdir_metacharacters_refused_on_old_rsync(
+    leaf, rsync, tmp_path, monkeypatch, bad
+):
+    monkeypatch.setattr(base, "local_rsync_version", lambda: (3, 1, 3))
     with pytest.raises(ValueError, match="subdir"):
         sync_to(leaf, tmp_path / "d", subdir=bad)
     assert rsync == []
+
+
+@pytest.mark.parametrize("bad", _METACHARACTER_SUBDIRS)
+def test_sync_to_subdir_metacharacters_protected_on_new_rsync(
+    leaf, rsync, tmp_path, monkeypatch, bad
+):
+    """With ``-s`` the remote path reaches the remote rsync unsplit: no shell sees it."""
+    monkeypatch.setattr(base, "local_rsync_version", lambda: (3, 2, 7))
+    sync_to(leaf, tmp_path / "d", subdir=bad)
+    cmd = rsync[0]
+    assert "-s" in cmd[: cmd.index("u@h:/remote/root/" + bad + "/")]
+    assert cmd[-2] == f"u@h:/remote/root/{bad}/"
+
+
+def test_sync_to_plain_subdir_does_not_use_protect_args(leaf, rsync, tmp_path):
+    sync_to(leaf, tmp_path / "d", subdir="sub/x")
+    assert "-s" not in rsync[0]

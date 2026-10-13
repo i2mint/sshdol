@@ -306,7 +306,34 @@ def _resolve_sync_target(target) -> str:
 
 _SAFE_SUBDIR = re.compile(
     r"^[\w./@%+=:,-]+$"
-)  # no spaces/shell metacharacters (old rsyncs)
+)  # no spaces/shell metacharacters (old rsyncs split the remote path in a shell)
+_UNPRINTABLE = re.compile(r"[\x00-\x1f\x7f]")
+_RSYNC_GLOB = re.compile(r"[*?\[\]]")  # the remote rsync expands these itself, even with -s
+PROTECT_ARGS_MIN_RSYNC = (3, 2, 4)  # from here on the remote path is not shell-split with -s
+
+
+_rsync_version_cache: tuple[int, ...] | None = None
+
+
+def local_rsync_version() -> tuple[int, ...]:
+    """Version of the local ``rsync`` as a tuple, ``()`` if it cannot be determined.
+
+    >>> local_rsync_version() == () or len(local_rsync_version()) >= 2
+    True
+    """
+    global _rsync_version_cache
+    if _rsync_version_cache is None:
+        try:
+            out = subprocess.run(
+                ["rsync", "--version"], capture_output=True, text=True, timeout=10
+            ).stdout
+        except (OSError, subprocess.SubprocessError):
+            return ()  # not cached: a temporary failure is not remembered
+        m = re.search(r"version v?(\d+)\.(\d+)(?:\.(\d+))?", out)
+        if not m:
+            return ()
+        _rsync_version_cache = tuple(int(x) for x in m.groups() if x is not None)
+    return _rsync_version_cache
 
 
 class SshFilesReader(Mapping):
@@ -1203,10 +1230,19 @@ class SshFiles(SshFilesReader, MutableMapping):
         remote_root = self.rootdir.rstrip("/")
         if subdir:
             if not _SAFE_SUBDIR.match(subdir):
-                raise ValueError(
-                    f"subdir has characters outside [\\w./@%+=:,-]: {subdir!r} "
-                    "(rsync may split them in the remote shell)"
-                )
+                if _UNPRINTABLE.search(subdir):
+                    raise ValueError(f"subdir has control characters: {subdir!r}")
+                if _RSYNC_GLOB.search(subdir):
+                    raise ValueError(
+                        f"subdir has rsync wildcard characters (* ? [ ]): {subdir!r}; the "
+                        "remote rsync would expand them past the symlink-confinement check"
+                    )
+                if local_rsync_version() < PROTECT_ARGS_MIN_RSYNC:
+                    raise ValueError(
+                        f"subdir has characters outside [\\w./@%+=:,-]: {subdir!r}, which "
+                        "rsync older than 3.2.4 may split in the remote shell"
+                    )
+                rsync_cmd.append("-s")  # --protect-args: no remote-shell splitting (not for globs: above)
             remote_root += "/" + self._confined_path(subdir).rstrip("/")
         remote_src = f"{self._conn_user}@{self._conn_host}:{remote_root}/"
         local_dst = os.path.join(target, "")

@@ -162,3 +162,82 @@ def test_sync_to_refuses_link_following_args(stores, tmp_path, flag):
     store, _, _ = stores
     with pytest.raises(ValueError, match="allow_escape"):
         sync_to(store, tmp_path / "d", extra_args=[flag])
+
+
+# ---- sync_to subdir with characters rsync would split (i2mint/sshdol#12) ----------------
+
+
+@pytest.mark.parametrize("name", ["my dir", "a;b $x", "quote'd", "ünï cödé"])
+def test_sync_to_subdir_with_unusual_characters(stores, tmp_path, name):
+    from sshdol.base import PROTECT_ARGS_MIN_RSYNC, local_rsync_version
+
+    if local_rsync_version() < PROTECT_ARGS_MIN_RSYNC:
+        pytest.skip("needs rsync >= 3.2.4")
+    store, sftp, _ = stores
+    sftp.mkdir(BASE + "/root/" + name)
+    with sftp.file(BASE + "/root/" + name + "/f.txt", "wb") as f:
+        f.write(b"in " + name.encode())
+    sync_to(store, tmp_path / "d", subdir=name)
+    assert (tmp_path / "d" / "f.txt").read_bytes() == b"in " + name.encode()
+    assert not (tmp_path / "d" / "sub").exists()  # only the subdir was synced
+
+
+def test_sync_to_subdir_unusual_characters_refused_on_old_rsync(
+    stores, tmp_path, monkeypatch
+):
+    import sshdol.base as base
+
+    monkeypatch.setattr(base, "local_rsync_version", lambda: (3, 1, 3))
+    store, _, _ = stores
+    with pytest.raises(ValueError, match="3.2.4"):
+        sync_to(store, tmp_path / "d", subdir="my dir")
+
+
+def test_sync_to_subdir_control_characters_refused(stores, tmp_path):
+    store, _, _ = stores
+    with pytest.raises(ValueError, match="control"):
+        sync_to(store, tmp_path / "d", subdir="a\nb")
+
+
+@pytest.mark.parametrize("pattern", ["ln[k]", "l?k", "l*", "*", "[l]nk", "sub/[.][.]"])
+def test_sync_to_subdir_wildcards_cannot_reach_through_a_link(stores, tmp_path, pattern):
+    """The remote rsync expands wildcards itself, past the symlink check on the literal name."""
+    store, sftp, outside = stores
+    sftp.symlink(outside, BASE + "/root/lnk")
+    with pytest.raises(ValueError, match="wildcard"):
+        sync_to(store, tmp_path / "d", subdir=pattern)
+    assert not (tmp_path / "d").exists() or not list((tmp_path / "d").iterdir())
+
+
+@pytest.mark.parametrize(
+    "out, expected",
+    [
+        ("rsync  version 3.4.1  protocol version 32", (3, 4, 1)),
+        ("rsync  version v3.2.7  protocol version 31", (3, 2, 7)),
+        ("rsync  version 3.2.4pre1  protocol version 31", (3, 2, 4)),
+    ],
+)
+def test_local_rsync_version_parsing(monkeypatch, out, expected):
+    import subprocess
+
+    import sshdol.base as base
+
+    monkeypatch.setattr(base, "_rsync_version_cache", None)
+    monkeypatch.setattr(
+        base.subprocess,
+        "run",
+        lambda *a, **k: subprocess.CompletedProcess(a, 0, stdout=out),
+    )
+    assert base.local_rsync_version() == expected
+
+
+def test_failed_rsync_version_is_not_cached(monkeypatch):
+    import sshdol.base as base
+
+    monkeypatch.setattr(base, "_rsync_version_cache", None)
+
+    def boom(*a, **k):
+        raise OSError("no rsync")
+
+    monkeypatch.setattr(base.subprocess, "run", boom)
+    assert base.local_rsync_version() == () and base._rsync_version_cache is None
