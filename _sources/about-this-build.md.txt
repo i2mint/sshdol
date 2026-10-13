@@ -5,7 +5,7 @@ orphan: true
 
 # About this build
 
-This documentation was built on **2026-10-13 11:23 UTC** from commit <a href="https://github.com/i2mint/sshdol/commit/9be93993294908124acb12196f1ef4e55424b7d3"><code>9be9399</code></a> on branch <code>master</code>, for **sshdol 0.0.13** (from <code>pyproject.toml</code>).
+This documentation was built on **2026-10-13 12:19 UTC** from commit <a href="https://github.com/i2mint/sshdol/commit/fe8c308eb4d29f590f58e725174995aebc62ab0d"><code>fe8c308</code></a> on branch <code>master</code>, for **sshdol 0.0.14** (from <code>pyproject.toml</code>).
 
 :::{note}
 Nothing suggests a mismatch: the tree was clean at the commit above, and the documented version is the one on PyPI.
@@ -15,7 +15,7 @@ Nothing suggests a mismatch: the tree was clean at the commit above, and the doc
 
 | | |
 |---|---|
-| Commit | <a href="https://github.com/i2mint/sshdol/commit/9be93993294908124acb12196f1ef4e55424b7d3"><code>9be93993294908124acb12196f1ef4e55424b7d3</code></a> |
+| Commit | <a href="https://github.com/i2mint/sshdol/commit/fe8c308eb4d29f590f58e725174995aebc62ab0d"><code>fe8c308eb4d29f590f58e725174995aebc62ab0d</code></a> |
 | Branch | <code>master</code> |
 | Tags at this commit | none |
 | Working tree | clean |
@@ -26,9 +26,9 @@ Nothing suggests a mismatch: the tree was clean at the commit above, and the doc
 | | |
 |---|---|
 | Repository | <code>i2mint/sshdol</code> |
-| Run | <a href="https://github.com/i2mint/sshdol/actions/runs/38389708400">38389708400</a> |
+| Run | <a href="https://github.com/i2mint/sshdol/actions/runs/38396323270">38396323270</a> |
 | Ref | <code>refs/heads/master</code> |
-| Event commit | <code>9be93993294908124acb12196f1ef4e55424b7d3</code> (in the history of the built commit) |
+| Event commit | <code>fe8c308eb4d29f590f58e725174995aebc62ab0d</code> (in the history of the built commit) |
 
 ## Tools
 
@@ -53,13 +53,13 @@ Nothing suggests a mismatch: the tree was clean at the commit above, and the doc
 
 ## Package on PyPI
 
-Latest release: <a href="https://pypi.org/project/sshdol/0.0.13/">0.0.13</a>, the same as the documented version.
+Latest release: <a href="https://pypi.org/project/sshdol/0.0.14/">0.0.14</a>, the same as the documented version.
 
 ## Reproduce
 
 ```bash
 git clone https://github.com/i2mint/sshdol && cd sshdol
-git checkout 9be93993294908124acb12196f1ef4e55424b7d3
+git checkout fe8c308eb4d29f590f58e725174995aebc62ab0d
 pip install "epythet==0.2.15"
 epythet quickstart . --ignore tests/ scrap/ examples/
 ```

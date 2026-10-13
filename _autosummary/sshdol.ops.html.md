@@ -25,9 +25,8 @@ caller’s own store.
 >>> mkdir(view, "newdir")  # creates rootdir/sub/newdir
 ```
 
-What stays outside the reach of [`mkdir()`](#sshdol.ops.mkdir), stated rather than hidden: a `filt_iter`
-scope is not consulted before a directory is created (there is no non-writing scope probe
-for a key that does not exist yet), so the directory can be created outside the view.
+A `filt_iter` scope is honoured by [`mkdir()`](#sshdol.ops.mkdir) (`dol.key_in_scope`, i2mint/sshdol#12): a
+directory outside the view is not created.
 
 ### Functions
 
@@ -43,10 +42,20 @@ Create directory `path` (a key of `store`) on the server.
 `store[path] = ...` would write. Returns nothing: index `store[path]` yourself for
 the sub-store (a value codec may not be able to decode a directory).
 
+`path` must also be inside the scope of every `filt_iter` layer of `store`, probed
+with `dol.key_in_scope` as the key it is (`'sub/new'` or `'sub/new/'`, as the
+caller wrote it): otherwise `KeyError` and nothing is created. The scope is judged on
+the key *as spelled*: on a wrapped store a `..` segment is refused (it could resolve
+to a place the spelling does not show), and symbolic links on the server are not
+resolved for it (`rootdir` confinement is). A predicate that cannot handle the key
+raises its own error, as `key_in_scope` does (see its limits).
+
 * **Parameters:**
   * **store** – an `SshFiles`, wrapped or not
   * **path** – a key of `store`
   * **exist_ok** ([`bool`](https://docs.python.org/3/builtins/functions.html#bool)) – if True, an existing directory is not an error
+* **Raises:**
+  [**KeyError**](https://docs.python.org/3/builtins/exceptions.html#KeyError) – if `path` is outside the store’s scope (or leaves `rootdir`)
 * **Return type:**
   [`None`](https://docs.python.org/3/builtins/constants.html#None)
 

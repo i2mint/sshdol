@@ -1,32 +1,32 @@
 {
   "schema_version": 1,
-  "built_at": "2026-10-13T11:23:11Z",
+  "built_at": "2026-10-13T12:19:46Z",
   "package": {
     "name": "sshdol",
-    "version": "0.0.13",
+    "version": "0.0.14",
     "display_name": "sshdol",
     "source": "pyproject.toml"
   },
   "git": {
     "available": true,
-    "commit": "9be93993294908124acb12196f1ef4e55424b7d3",
-    "short_commit": "9be9399",
+    "commit": "fe8c308eb4d29f590f58e725174995aebc62ab0d",
+    "short_commit": "fe8c308",
     "branch": "master",
     "tags": [],
     "dirty": false,
     "remote_url": "https://github.com/i2mint/sshdol",
-    "commit_url": "https://github.com/i2mint/sshdol/commit/9be93993294908124acb12196f1ef4e55424b7d3",
+    "commit_url": "https://github.com/i2mint/sshdol/commit/fe8c308eb4d29f590f58e725174995aebc62ab0d",
     "error": null
   },
   "ci": {
     "provider": "github",
     "repository": "i2mint/sshdol",
-    "sha": "9be93993294908124acb12196f1ef4e55424b7d3",
+    "sha": "fe8c308eb4d29f590f58e725174995aebc62ab0d",
     "sha_in_history": true,
     "ref": "refs/heads/master",
     "ref_name": "master",
-    "run_id": "38389708400",
-    "run_url": "https://github.com/i2mint/sshdol/actions/runs/38389708400",
+    "run_id": "38396323270",
+    "run_url": "https://github.com/i2mint/sshdol/actions/runs/38396323270",
     "server_url": "https://github.com"
   },
   "tools": {
@@ -60,11 +60,11 @@
   },
   "pypi": {
     "checked": true,
-    "latest": "0.0.13",
+    "latest": "0.0.14",
     "relation": "same",
     "error": null
   },
-  "reproduce": "git clone https://github.com/i2mint/sshdol && cd sshdol\ngit checkout 9be93993294908124acb12196f1ef4e55424b7d3\npip install \"epythet==0.2.15\"\nepythet quickstart . --ignore tests/ scrap/ examples/",
+  "reproduce": "git clone https://github.com/i2mint/sshdol && cd sshdol\ngit checkout fe8c308eb4d29f590f58e725174995aebc62ab0d\npip install \"epythet==0.2.15\"\nepythet quickstart . --ignore tests/ scrap/ examples/",
   "warnings": [],
   "alignment": {
     "aligned": true,

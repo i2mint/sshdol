@@ -273,9 +273,8 @@ caller’s own store.</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">mkdir</span><span class="p">(</span><span class="n">view</span><span class="p">,</span> <span class="s2">"newdir"</span><span class="p">)</span>  <span class="c1"># creates rootdir/sub/newdir</span>
 </pre></div>
 </div>
-<p>What stays outside the reach of <a class="reference internal" href="#sshdol.ops.mkdir" title="sshdol.ops.mkdir"><code class="xref py py-func docutils literal notranslate"><span class="pre">mkdir()</span></code></a>, stated rather than hidden: a <code class="docutils literal notranslate"><span class="pre">filt_iter</span></code>
-scope is not consulted before a directory is created (there is no non-writing scope probe
-for a key that does not exist yet), so the directory can be created outside the view.</p>
+<p>A <code class="docutils literal notranslate"><span class="pre">filt_iter</span></code> scope is honoured by <a class="reference internal" href="#sshdol.ops.mkdir" title="sshdol.ops.mkdir"><code class="xref py py-func docutils literal notranslate"><span class="pre">mkdir()</span></code></a> (<code class="docutils literal notranslate"><span class="pre">dol.key_in_scope</span></code>, i2mint/sshdol#12): a
+directory outside the view is not created.</p>
 <p class="rubric">Functions</p>
 <div class="table-wrapper autosummary longtable docutils container">
 <table class="autosummary longtable docutils align-default">
@@ -296,6 +295,13 @@ for a key that does not exist yet), so the directory can be created outside the 
 <p><code class="docutils literal notranslate"><span class="pre">path</span></code> is resolved through every layer of <code class="docutils literal notranslate"><span class="pre">store</span></code> first, so it lands where
 <code class="docutils literal notranslate"><span class="pre">store[path]</span> <span class="pre">=</span> <span class="pre">...</span></code> would write. Returns nothing: index <code class="docutils literal notranslate"><span class="pre">store[path]</span></code> yourself for
 the sub-store (a value codec may not be able to decode a directory).</p>
+<p><code class="docutils literal notranslate"><span class="pre">path</span></code> must also be inside the scope of every <code class="docutils literal notranslate"><span class="pre">filt_iter</span></code> layer of <code class="docutils literal notranslate"><span class="pre">store</span></code>, probed
+with <code class="docutils literal notranslate"><span class="pre">dol.key_in_scope</span></code> as the key it is (<code class="docutils literal notranslate"><span class="pre">'sub/new'</span></code> or <code class="docutils literal notranslate"><span class="pre">'sub/new/'</span></code>, as the
+caller wrote it): otherwise <code class="docutils literal notranslate"><span class="pre">KeyError</span></code> and nothing is created. The scope is judged on
+the key <em>as spelled</em>: on a wrapped store a <code class="docutils literal notranslate"><span class="pre">..</span></code> segment is refused (it could resolve
+to a place the spelling does not show), and symbolic links on the server are not
+resolved for it (<code class="docutils literal notranslate"><span class="pre">rootdir</span></code> confinement is). A predicate that cannot handle the key
+raises its own error, as <code class="docutils literal notranslate"><span class="pre">key_in_scope</span></code> does (see its limits).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -304,8 +310,11 @@ the sub-store (a value codec may not be able to decode a directory).</p>
 <li><p><strong>exist_ok</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></span>) – if True, an existing directory is not an error</p></li>
 </ul>
 </dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a></span></p>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#KeyError" title="(in Python v3.15)"><strong>KeyError</strong></a> – if <code class="docutils literal notranslate"><span class="pre">path</span></code> is outside the store’s scope (or leaves <code class="docutils literal notranslate"><span class="pre">rootdir</span></code>)</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a></span></p>
 </dd>
 </dl>
 </dd></dl>
@@ -393,7 +402,7 @@ arguments are those of <code class="docutils literal notranslate"><span class="p
       
     </aside>
   </div>
-</div><script src="../_static/documentation_options.js?v=6b09a97f"></script>
+</div><script src="../_static/documentation_options.js?v=832ae8cf"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/scripts/furo.js?v=46bd48cc"></script>

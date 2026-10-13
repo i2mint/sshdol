@@ -1,4 +1,4 @@
-> built 2026-10-13 11:23 UTC from 9be9399 (master) · sshdol 0.0.13. Details: build_info.json
+> built 2026-10-13 12:19 UTC from fe8c308 (master) · sshdol 0.0.14. Details: build_info.json
 
 # index.html.md
 
@@ -587,9 +587,8 @@ caller’s own store.
 >>> mkdir(view, "newdir")  # creates rootdir/sub/newdir
 ```
 
-What stays outside the reach of [`mkdir()`](_autosummary/sshdol.ops.html.md#sshdol.ops.mkdir), stated rather than hidden: a `filt_iter`
-scope is not consulted before a directory is created (there is no non-writing scope probe
-for a key that does not exist yet), so the directory can be created outside the view.
+A `filt_iter` scope is honoured by [`mkdir()`](_autosummary/sshdol.ops.html.md#sshdol.ops.mkdir) (`dol.key_in_scope`, i2mint/sshdol#12): a
+directory outside the view is not created.
 
 ### Functions
 
@@ -605,10 +604,20 @@ Create directory `path` (a key of `store`) on the server.
 `store[path] = ...` would write. Returns nothing: index `store[path]` yourself for
 the sub-store (a value codec may not be able to decode a directory).
 
+`path` must also be inside the scope of every `filt_iter` layer of `store`, probed
+with `dol.key_in_scope` as the key it is (`'sub/new'` or `'sub/new/'`, as the
+caller wrote it): otherwise `KeyError` and nothing is created. The scope is judged on
+the key *as spelled*: on a wrapped store a `..` segment is refused (it could resolve
+to a place the spelling does not show), and symbolic links on the server are not
+resolved for it (`rootdir` confinement is). A predicate that cannot handle the key
+raises its own error, as `key_in_scope` does (see its limits).
+
 * **Parameters:**
   * **store** – an `SshFiles`, wrapped or not
   * **path** – a key of `store`
   * **exist_ok** ([`bool`](https://docs.python.org/3/builtins/functions.html#bool)) – if True, an existing directory is not an error
+* **Raises:**
+  [**KeyError**](https://docs.python.org/3/builtins/exceptions.html#KeyError) – if `path` is outside the store’s scope (or leaves `rootdir`)
 * **Return type:**
   [`None`](https://docs.python.org/3/builtins/constants.html#None)
 
@@ -632,7 +641,7 @@ arguments are those of `SshFiles.sync_to`’s implementation: `delete_local_file
 
 # About this build
 
-This documentation was built on **2026-10-13 11:23 UTC** from commit <a href="https://github.com/i2mint/sshdol/commit/9be93993294908124acb12196f1ef4e55424b7d3"><code>9be9399</code></a> on branch <code>master</code>, for **sshdol 0.0.13** (from <code>pyproject.toml</code>).
+This documentation was built on **2026-10-13 12:19 UTC** from commit <a href="https://github.com/i2mint/sshdol/commit/fe8c308eb4d29f590f58e725174995aebc62ab0d"><code>fe8c308</code></a> on branch <code>master</code>, for **sshdol 0.0.14** (from <code>pyproject.toml</code>).
 
 #### NOTE
 Nothing suggests a mismatch: the tree was clean at the commit above, and the documented version is the one on PyPI.
@@ -641,7 +650,7 @@ Nothing suggests a mismatch: the tree was clean at the commit above, and the doc
 
 |                     |                                                                                                                                                      |
 |---------------------|------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Commit              | <a href="https://github.com/i2mint/sshdol/commit/9be93993294908124acb12196f1ef4e55424b7d3"><code>9be93993294908124acb12196f1ef4e55424b7d3</code></a> |
+| Commit              | <a href="https://github.com/i2mint/sshdol/commit/fe8c308eb4d29f590f58e725174995aebc62ab0d"><code>fe8c308eb4d29f590f58e725174995aebc62ab0d</code></a> |
 | Branch              | <code>master</code>                                                                                                                                  |
 | Tags at this commit | none                                                                                                                                                 |
 | Working tree        | clean                                                                                                                                                |
@@ -652,9 +661,9 @@ Nothing suggests a mismatch: the tree was clean at the commit above, and the doc
 |              |                                                                                            |
 |--------------|--------------------------------------------------------------------------------------------|
 | Repository   | <code>i2mint/sshdol</code>                                                                 |
-| Run          | <a href="https://github.com/i2mint/sshdol/actions/runs/38389708400">38389708400</a>        |
+| Run          | <a href="https://github.com/i2mint/sshdol/actions/runs/38396323270">38396323270</a>        |
 | Ref          | <code>refs/heads/master</code>                                                             |
-| Event commit | <code>9be93993294908124acb12196f1ef4e55424b7d3</code> (in the history of the built commit) |
+| Event commit | <code>fe8c308eb4d29f590f58e725174995aebc62ab0d</code> (in the history of the built commit) |
 
 ## Tools
 
@@ -679,13 +688,13 @@ Nothing suggests a mismatch: the tree was clean at the commit above, and the doc
 
 ## Package on PyPI
 
-Latest release: <a href="https://pypi.org/project/sshdol/0.0.13/">0.0.13</a>, the same as the documented version.
+Latest release: <a href="https://pypi.org/project/sshdol/0.0.14/">0.0.14</a>, the same as the documented version.
 
 ## Reproduce
 
 ```bash
 git clone https://github.com/i2mint/sshdol && cd sshdol
-git checkout 9be93993294908124acb12196f1ef4e55424b7d3
+git checkout fe8c308eb4d29f590f58e725174995aebc62ab0d
 pip install "epythet==0.2.15"
 epythet quickstart . --ignore tests/ scrap/ examples/
 ```

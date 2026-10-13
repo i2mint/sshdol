@@ -584,8 +584,14 @@
     <span class="sa">r</span><span class="s2">"^[\w./@%+=:,-]+$"</span>
 <span class="p">)</span>  <span class="c1"># no spaces/shell metacharacters (old rsyncs split the remote path in a shell)</span>
 <span class="n">_UNPRINTABLE</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">"[\x00-\x1f\x7f]"</span><span class="p">)</span>
-<span class="n">_RSYNC_GLOB</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">"[*?\[\]]"</span><span class="p">)</span>  <span class="c1"># the remote rsync expands these itself, even with -s</span>
-<span class="n">PROTECT_ARGS_MIN_RSYNC</span> <span class="o">=</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>  <span class="c1"># from here on the remote path is not shell-split with -s</span>
+<span class="n">_RSYNC_GLOB</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span>
+    <span class="sa">r</span><span class="s2">"[*?\[\]]"</span>
+<span class="p">)</span>  <span class="c1"># the remote rsync expands these itself, even with -s</span>
+<span class="n">PROTECT_ARGS_MIN_RSYNC</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="mi">3</span><span class="p">,</span>
+    <span class="mi">2</span><span class="p">,</span>
+    <span class="mi">4</span><span class="p">,</span>
+<span class="p">)</span>  <span class="c1"># from here on the remote path is not shell-split with -s</span>
 
 
 <span class="n">_rsync_version_cache</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
@@ -1532,7 +1538,9 @@
                         <span class="sa">f</span><span class="s2">"subdir has characters outside [</span><span class="se">\\</span><span class="s2">w./@%+=:,-]: </span><span class="si">{</span><span class="n">subdir</span><span class="si">!r}</span><span class="s2">, which "</span>
                         <span class="s2">"rsync older than 3.2.4 may split in the remote shell"</span>
                     <span class="p">)</span>
-                <span class="n">rsync_cmd</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"-s"</span><span class="p">)</span>  <span class="c1"># --protect-args: no remote-shell splitting (not for globs: above)</span>
+                <span class="n">rsync_cmd</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="s2">"-s"</span>
+                <span class="p">)</span>  <span class="c1"># --protect-args: no remote-shell splitting (not for globs: above)</span>
             <span class="n">remote_root</span> <span class="o">+=</span> <span class="s2">"/"</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">_confined_path</span><span class="p">(</span><span class="n">subdir</span><span class="p">)</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s2">"/"</span><span class="p">)</span>
         <span class="n">remote_src</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_conn_user</span><span class="si">}</span><span class="s2">@</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_conn_host</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">remote_root</span><span class="si">}</span><span class="s2">/"</span>
         <span class="n">local_dst</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="s2">""</span><span class="p">)</span>
@@ -1607,7 +1615,7 @@
       
     </aside>
   </div>
-</div><script src="../../_static/documentation_options.js?v=6b09a97f"></script>
+</div><script src="../../_static/documentation_options.js?v=832ae8cf"></script>
     <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/scripts/furo.js?v=46bd48cc"></script>

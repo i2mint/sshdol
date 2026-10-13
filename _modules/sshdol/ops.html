@@ -264,16 +264,15 @@
 <span class="sd">&gt;&gt;&gt; view = KeyCodecs.prefixed("sub/")(SshFiles(host="myserver"))  # doctest: +SKIP</span>
 <span class="sd">&gt;&gt;&gt; mkdir(view, "newdir")  # creates rootdir/sub/newdir  # doctest: +SKIP</span>
 
-<span class="sd">What stays outside the reach of :func:`mkdir`, stated rather than hidden: a ``filt_iter``</span>
-<span class="sd">scope is not consulted before a directory is created (there is no non-writing scope probe</span>
-<span class="sd">for a key that does not exist yet), so the directory can be created outside the view.</span>
+<span class="sd">A ``filt_iter`` scope is honoured by :func:`mkdir` (``dol.key_in_scope``, i2mint/sshdol#12): a</span>
+<span class="sd">directory outside the view is not created.</span>
 <span class="sd">"""</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">dol</span><span class="w"> </span><span class="kn">import</span> <span class="n">inner_most_key</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dol</span><span class="w"> </span><span class="kn">import</span> <span class="n">inner_most_key</span><span class="p">,</span> <span class="n">key_in_scope</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">sshdol.base</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">SshFiles</span><span class="p">,</span>
@@ -305,13 +304,26 @@
 <span class="sd">    ``store[path] = ...`` would write. Returns nothing: index ``store[path]`` yourself for</span>
 <span class="sd">    the sub-store (a value codec may not be able to decode a directory).</span>
 
+<span class="sd">    ``path`` must also be inside the scope of every ``filt_iter`` layer of ``store``, probed</span>
+<span class="sd">    with ``dol.key_in_scope`` as the key it is (``'sub/new'`` or ``'sub/new/'``, as the</span>
+<span class="sd">    caller wrote it): otherwise ``KeyError`` and nothing is created. The scope is judged on</span>
+<span class="sd">    the key *as spelled*: on a wrapped store a ``..`` segment is refused (it could resolve</span>
+<span class="sd">    to a place the spelling does not show), and symbolic links on the server are not</span>
+<span class="sd">    resolved for it (``rootdir`` confinement is). A predicate that cannot handle the key</span>
+<span class="sd">    raises its own error, as ``key_in_scope`` does (see its limits).</span>
+
 <span class="sd">    :param store: an ``SshFiles``, wrapped or not</span>
 <span class="sd">    :param path: a key of ``store``</span>
 <span class="sd">    :param exist_ok: if True, an existing directory is not an error</span>
+<span class="sd">    :raises KeyError: if ``path`` is outside the store's scope (or leaves ``rootdir``)</span>
 <span class="sd">    """</span>
     <span class="n">leaf</span> <span class="o">=</span> <span class="n">_leaf_of</span><span class="p">(</span><span class="n">store</span><span class="p">)</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">leaf</span><span class="p">,</span> <span class="n">SshFiles</span><span class="p">):</span>
         <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">"mkdir needs a writable SshFiles, got a reader"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">store</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">leaf</span> <span class="ow">and</span> <span class="s2">".."</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">"</span><span class="se">\\</span><span class="s2">"</span><span class="p">,</span> <span class="s2">"/"</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">"/"</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Key with '..' is not allowed on a wrapped store: </span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">key_in_scope</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Key not in store: </span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
     <span class="n">inner</span> <span class="o">=</span> <span class="n">inner_most_key</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">inner</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">PathLike</span><span class="p">):</span>
         <span class="n">inner</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">fspath</span><span class="p">(</span><span class="n">inner</span><span class="p">)</span>
@@ -371,7 +383,7 @@
       
     </aside>
   </div>
-</div><script src="../../_static/documentation_options.js?v=6b09a97f"></script>
+</div><script src="../../_static/documentation_options.js?v=832ae8cf"></script>
     <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/scripts/furo.js?v=46bd48cc"></script>
