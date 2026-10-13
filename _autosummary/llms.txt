@@ -7,6 +7,7 @@
 
 - [sshdol](sshdol.html.md): SSH-based file access with Mapping interface.
 - [sshdol.base](sshdol.base.html.md): Base functionality for sshdol.
+- [sshdol.ops](sshdol.ops.html.md): Key-taking and scope-wide operations, as free functions over the caller’s (possibly wrapped) store.
 
 ## Optional
 

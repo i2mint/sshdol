@@ -11,3 +11,4 @@
    :recursive:
 
    base
+   ops

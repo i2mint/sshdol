@@ -16,5 +16,6 @@ text   | SshTextFilesReader | SshTextFiles       |
 
 ### Modules
 
-| [`base`](sshdol.base.html.md#module-sshdol.base)   | Base functionality for sshdol.   |
-|----------------------------------------------------------------------------|----------------------------------|
+| [`base`](sshdol.base.html.md#module-sshdol.base)   | Base functionality for sshdol.                                                                      |
+|----------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------|
+| [`ops`](sshdol.ops.html.md#module-sshdol.ops)     | Key-taking and scope-wide operations, as free functions over the caller's (possibly wrapped) store. |

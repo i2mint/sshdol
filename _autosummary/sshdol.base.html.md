@@ -35,6 +35,11 @@ Design notes:
 | [`SshTextFiles`](#sshdol.base.SshTextFiles)([host, user, password, url, ...])   | Read-write interface to text files on a remote SSH server.                        |
 | [`SshTextFilesReader`](#sshdol.base.SshTextFilesReader)([host, user, password, ...])  | Read-only interface to text files on a remote SSH server.                         |
 
+### Exceptions
+
+| [`WrappedStoreError`](#sshdol.base.WrappedStoreError)   | A scope-wide operation was given a `dol`-wrapped store or target (i2mint/sshdol#6).   |
+|----------------------------------------------------------------------|---------------------------------------------------------------------------------------|
+
 ### *class* sshdol.base.RejectUnknownHostKey
 
 Bases: `RejectPolicy`
@@ -70,47 +75,20 @@ Write to nested paths with directory creation
 >>> s['dir1/dir2/file.txt'] = b'Nested content'
 ```
 
-#### mkdir(path, exist_ok=False)
+#### mkdir(\*args, \*\*kwargs)
 
-Create a directory on the SSH server.
+Removed: use `sshdol.ops.mkdir(store, path)`.
 
-* **Parameters:**
-  * **path** – Directory path to create
-  * **exist_ok** – If True, don’t raise an error if directory already exists
-* **Returns:**
-  A new instance for the created directory
-* **Return type:**
-  [*SshFiles*](#sshdol.base.SshFiles)
-* **Raises:**
-  [**KeyError**](https://docs.python.org/3/builtins/exceptions.html#KeyError) – If directory cannot be created
+A method runs bound to the leaf, so under a `dol` key transform it received the
+caller’s unmapped key and created the directory in the wrong place (i2mint/sshdol#6).
 
-#### sync_to(target, , delete_local_files_not_in_remote=False, delete_mode=None, recycle_bin='/home/runner/.local/share/Trash/files', compress=True, extra_args=None)
+#### sync_to(\*args, \*\*kwargs)
 
-Synchronize remote rootdir to a local directory using rsync over SSH.
+Removed: use `sshdol.ops.sync_to(store, target, subdir=...)`.
 
-This uses one local rsync invocation, which negotiates efficiently with the
-remote over SSH, minimizing round-trips and transferring only deltas.
-
-* **Parameters:**
-  * **target** ([`str`](https://docs.python.org/3/builtins/stdtypes.html#str)) – Local directory to sync into (created if missing).
-  * **delete_local_files_not_in_remote** ([`bool`](https://docs.python.org/3/builtins/functions.html#bool)) – If True, remove local files that are not on remote (rsync –delete).
-  * **delete_mode** ([`Optional`](https://docs.python.org/3/library/typing.html#typing.Optional)[[`Literal`](https://docs.python.org/3/library/typing.html#typing.Literal)[`'after'`, `'before'`, `'delay'`, `'during'`, `'recycle'`]]) – 
-
-    Choose when/how deletion occurs. One of:
-    - ’before’  -> –delete-before
-    - ’after’   -> –delete-after
-    - ’delay’   -> –delete-delay
-    - ’during’  -> –delete-during
-    - ’recycle’ -> move would-be deletions into recycle_bin using –backup/–backup-dir
-      If None, rsync uses its default timing when –delete is set.
-  * **recycle_bin** ([`str`](https://docs.python.org/3/builtins/stdtypes.html#str)) – When delete_mode=’recycle’, directory to store deleted items.
-    Defaults to the OS recycle location (macOS: ~/.Trash, Linux: ~/.local/share/Trash/files).
-  * **compress** ([`bool`](https://docs.python.org/3/builtins/functions.html#bool)) – If True, use -z compression.
-  * **extra_args** ([`list`](https://docs.python.org/3/builtins/stdtypes.html#list)[[`str`](https://docs.python.org/3/builtins/stdtypes.html#str)] | [`None`](https://docs.python.org/3/builtins/constants.html#None)) – Additional rsync args (list of strings) to append.
-* **Raises:**
-  [**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) – If rsync is unavailable or the sync fails.
-* **Return type:**
-  [`None`](https://docs.python.org/3/builtins/constants.html#None)
+rsync is scoped by `rootdir`, not by any key view, so called through a `dol`
+wrapper this method copied files the view hides and `--delete` pruned the wrong
+tree (i2mint/sshdol#6).
 
 ### *class* sshdol.base.SshFilesReader(host=None, , user=None, password=None, url=None, port=22, key_filename=None, rootdir='.', include_hidden=False, include_directories=True, dir_access=True, encoding=None, max_levels=0, create_dirs=False, strict_contains=False, allow_escape=False, missing_host_key_policy=None, \_pinned_host_key=None)
 
@@ -150,6 +128,12 @@ Read-write interface to text files on a remote SSH server.
 Bases: [`SshFilesReader`](#sshdol.base.SshFilesReader)
 
 Read-only interface to text files on a remote SSH server.
+
+### *exception* sshdol.base.WrappedStoreError
+
+Bases: [`ValueError`](https://docs.python.org/3/builtins/exceptions.html#ValueError)
+
+A scope-wide operation was given a `dol`-wrapped store or target (i2mint/sshdol#6).
 
 ### sshdol.base.escapes_root(path)
 

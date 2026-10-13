@@ -1,0 +1,13 @@
+sshdol.ops
+==========
+
+.. automodule:: sshdol.ops
+
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+   
+      mkdir
+      sync_to
+   

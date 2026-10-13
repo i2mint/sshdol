@@ -1,4 +1,4 @@
-> built 2026-09-22 16:35 UTC from 41be0ca (master) · sshdol 0.0.9. Details: build_info.json
+> built 2026-10-13 09:31 UTC from 1d75463 (master) · sshdol 0.0.10. Details: build_info.json
 
 # index.html.md
 
@@ -77,38 +77,39 @@ You can also use higher-level helpers such as `xdol.update_with_policy` to contr
 
 - High-performance (recommended for many files):
 
-Use `SshFiles.sync_to`, which leverages `rsync` under the hood for orders-of-magnitude faster syncs. It only supports local folder targets (or objects that expose a filesystem root via a `rootdir` attribute, e.g., `dol.Files`).
+Use `sshdol.sync_to(src, target)`, which leverages `rsync` under the hood for orders-of-magnitude faster syncs. It only supports local folder targets (a path).
 
 ```python
-from sshdol.base import SshFiles
-import dol
+from sshdol import SshFiles, sync_to
 
 src = SshFiles(host="myserver", rootdir="/remote/path")
 
 # Sync to a local path (fast; uses rsync)
-src.sync_to("/local/target/folder")
+sync_to(src, "/local/target/folder")
 
-# Or sync to a dol.Files instance (it has a .rootdir pointing to a local folder)
-dst = dol.Files("/local/target/folder")
-src.sync_to(dst)
+# A pathlib.Path works too. An object with a .rootdir (even a dol.Files) is refused:
+# its view may be narrower than its rootdir, and --delete would prune the rest.
 ```
 
 Notes:
 
 - Requires `rsync` installed locally.
-- Target must be a local filesystem path or an object with a `.rootdir` that is one (e.g., `dol.Files`).
+- `sync_to` is scoped by the store’s `rootdir`, not by any key view (this is why it is a free function: `SshFiles.sync_to` was removed, because a method of a `dol`-wrapped store runs on the leaf, i2mint/sshdol#6). It therefore refuses a store wrapped in a `dol` key codec or filter (`WrappedStoreError`), since it would copy files the view hides and `--delete` against the wrong tree. State a sub-scope explicitly: `sync_to(src, "/local/dir", subdir="projects")`. The `target` must be a path (for a `dol.Files` target, pass its directory).
+- Target must be a local filesystem path.
 - You can control deletion timing and safety:
 
 ```python
 # Remove local files not present on remote (mirror behavior)
-src.sync_to(
+sync_to(
+    src,
     "/local/target/folder",
     delete_local_files_not_in_remote=True,
     delete_mode="during",  # 'before' | 'after' | 'delay' | 'during'
 )
 
 # “Recycle” deletions instead of permanently deleting them
-src.sync_to(
+sync_to(
+    src,
     "/local/target/folder",
     delete_mode="recycle",  # uses rsync --backup/--backup-dir
     recycle_bin="~/.Trash",  # optional (defaults OS-specifically)
@@ -229,12 +230,17 @@ text = t["notes.txt"]  # Returns 'Hello, this is a text note'
 
 ### Creating a new directory
 
-Now, know that your ssh stores have a `mkdir` where you can make a directory,
-which can then be written in:
+Now, know that you can make a directory with `sshdol.mkdir(store, path)`,
+after which it can be written in. (It is a function rather than a method so that it
+maps the key through any `dol` key codec you have wrapped the store in; the old
+`SshFiles.mkdir` method was removed, i2mint/sshdol#6.)
 
 ```py
+from sshdol import mkdir
+
 # Create a new directory
-projects_dir = s.mkdir("projects")
+mkdir(s, "projects")
+projects_dir = s["projects"]
 
 # Write files in the new directory
 projects_dir["README.md"] = b"# Projects Directory"
@@ -310,6 +316,11 @@ Design notes:
 | [`SshTextFiles`](_autosummary/sshdol.base.html.md#sshdol.base.SshTextFiles)([host, user, password, url, ...])   | Read-write interface to text files on a remote SSH server.                        |
 | [`SshTextFilesReader`](_autosummary/sshdol.base.html.md#sshdol.base.SshTextFilesReader)([host, user, password, ...])  | Read-only interface to text files on a remote SSH server.                         |
 
+### Exceptions
+
+| [`WrappedStoreError`](_autosummary/sshdol.base.html.md#sshdol.base.WrappedStoreError)   | A scope-wide operation was given a `dol`-wrapped store or target (i2mint/sshdol#6).   |
+|----------------------------------------------------------------------|---------------------------------------------------------------------------------------|
+
 ### *class* sshdol.base.RejectUnknownHostKey
 
 Bases: `RejectPolicy`
@@ -345,47 +356,20 @@ Write to nested paths with directory creation
 >>> s['dir1/dir2/file.txt'] = b'Nested content'
 ```
 
-#### mkdir(path, exist_ok=False)
+#### mkdir(\*args, \*\*kwargs)
 
-Create a directory on the SSH server.
+Removed: use `sshdol.ops.mkdir(store, path)`.
 
-* **Parameters:**
-  * **path** – Directory path to create
-  * **exist_ok** – If True, don’t raise an error if directory already exists
-* **Returns:**
-  A new instance for the created directory
-* **Return type:**
-  [*SshFiles*](_autosummary/sshdol.base.html.md#sshdol.base.SshFiles)
-* **Raises:**
-  [**KeyError**](https://docs.python.org/3/builtins/exceptions.html#KeyError) – If directory cannot be created
+A method runs bound to the leaf, so under a `dol` key transform it received the
+caller’s unmapped key and created the directory in the wrong place (i2mint/sshdol#6).
 
-#### sync_to(target, , delete_local_files_not_in_remote=False, delete_mode=None, recycle_bin='/home/runner/.local/share/Trash/files', compress=True, extra_args=None)
+#### sync_to(\*args, \*\*kwargs)
 
-Synchronize remote rootdir to a local directory using rsync over SSH.
+Removed: use `sshdol.ops.sync_to(store, target, subdir=...)`.
 
-This uses one local rsync invocation, which negotiates efficiently with the
-remote over SSH, minimizing round-trips and transferring only deltas.
-
-* **Parameters:**
-  * **target** ([`str`](https://docs.python.org/3/builtins/stdtypes.html#str)) – Local directory to sync into (created if missing).
-  * **delete_local_files_not_in_remote** ([`bool`](https://docs.python.org/3/builtins/functions.html#bool)) – If True, remove local files that are not on remote (rsync –delete).
-  * **delete_mode** ([`Optional`](https://docs.python.org/3/library/typing.html#typing.Optional)[[`Literal`](https://docs.python.org/3/library/typing.html#typing.Literal)[`'after'`, `'before'`, `'delay'`, `'during'`, `'recycle'`]]) – 
-
-    Choose when/how deletion occurs. One of:
-    - ’before’  -> –delete-before
-    - ’after’   -> –delete-after
-    - ’delay’   -> –delete-delay
-    - ’during’  -> –delete-during
-    - ’recycle’ -> move would-be deletions into recycle_bin using –backup/–backup-dir
-      If None, rsync uses its default timing when –delete is set.
-  * **recycle_bin** ([`str`](https://docs.python.org/3/builtins/stdtypes.html#str)) – When delete_mode=’recycle’, directory to store deleted items.
-    Defaults to the OS recycle location (macOS: ~/.Trash, Linux: ~/.local/share/Trash/files).
-  * **compress** ([`bool`](https://docs.python.org/3/builtins/functions.html#bool)) – If True, use -z compression.
-  * **extra_args** ([`list`](https://docs.python.org/3/builtins/stdtypes.html#list)[[`str`](https://docs.python.org/3/builtins/stdtypes.html#str)] | [`None`](https://docs.python.org/3/builtins/constants.html#None)) – Additional rsync args (list of strings) to append.
-* **Raises:**
-  [**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) – If rsync is unavailable or the sync fails.
-* **Return type:**
-  [`None`](https://docs.python.org/3/builtins/constants.html#None)
+rsync is scoped by `rootdir`, not by any key view, so called through a `dol`
+wrapper this method copied files the view hides and `--delete` pruned the wrong
+tree (i2mint/sshdol#6).
 
 ### *class* sshdol.base.SshFilesReader(host=None, , user=None, password=None, url=None, port=22, key_filename=None, rootdir='.', include_hidden=False, include_directories=True, dir_access=True, encoding=None, max_levels=0, create_dirs=False, strict_contains=False, allow_escape=False, missing_host_key_policy=None, \_pinned_host_key=None)
 
@@ -425,6 +409,12 @@ Read-write interface to text files on a remote SSH server.
 Bases: [`SshFilesReader`](_autosummary/sshdol.base.html.md#sshdol.base.SshFilesReader)
 
 Read-only interface to text files on a remote SSH server.
+
+### *exception* sshdol.base.WrappedStoreError
+
+Bases: [`ValueError`](https://docs.python.org/3/builtins/exceptions.html#ValueError)
+
+A scope-wide operation was given a `dol`-wrapped store or target (i2mint/sshdol#6).
 
 ### sshdol.base.escapes_root(path)
 
@@ -533,8 +523,77 @@ text   | SshTextFilesReader | SshTextFiles       |
 
 ### Modules
 
-| [`base`](_autosummary/sshdol.base.html.md#module-sshdol.base)   | Base functionality for sshdol.   |
-|----------------------------------------------------------------------------|----------------------------------|
+| [`base`](_autosummary/sshdol.base.html.md#module-sshdol.base)   | Base functionality for sshdol.                                                                      |
+|----------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------|
+| [`ops`](_autosummary/sshdol.ops.html.md#module-sshdol.ops)     | Key-taking and scope-wide operations, as free functions over the caller's (possibly wrapped) store. |
+
+
+# _autosummary/sshdol.ops.html.md
+
+# sshdol.ops
+
+Key-taking and scope-wide operations, as free functions over the caller’s (possibly wrapped) store.
+
+`dol` wraps stores by delegation, so a *method* of a wrapped `SshFiles` runs bound to the
+inner leaf and receives the caller’s **outer**, unmapped key (i2mint/sshdol#6, i2mint/dol#83).
+Under a key codec `mkdir` created the directory in the wrong place, and `sync_to` (which
+is scoped by `rootdir`, not by any key view) copied files the view hides and, with
+`--delete`, pruned the wrong local tree. A free function is handed the outer store itself,
+so it can resolve the key through every wrapping layer before touching the server.
+
+- [`mkdir()`](_autosummary/sshdol.ops.html.md#sshdol.ops.mkdir) `(store, path)` maps `path` through every layer (`inner_most_key`).
+- [`sync_to()`](_autosummary/sshdol.ops.html.md#sshdol.ops.sync_to) `(store, target, subdir=...)` takes the *bare* store only: rsync cannot
+  honour a key view, so a wrapped store (or a wrapped `target`) is refused with
+  [`WrappedStoreError`](_autosummary/sshdol.base.html.md#sshdol.base.WrappedStoreError). State the scope explicitly with `subdir=`.
+
+The same design as cosmodol.ops and s3dol’s ADR-0011. The `SshFiles.mkdir` /
+`SshFiles.sync_to` methods were removed (they raise an `AttributeError` naming the
+replacement): a method cannot reliably tell it is wrapped, a free function is handed the
+caller’s own store.
+
+```pycon
+>>> from sshdol.ops import mkdir, sync_to
+>>> view = KeyCodecs.prefixed("sub/")(SshFiles(host="myserver"))
+>>> mkdir(view, "newdir")  # creates rootdir/sub/newdir
+```
+
+What stays outside the reach of [`mkdir()`](_autosummary/sshdol.ops.html.md#sshdol.ops.mkdir), stated rather than hidden: a `filt_iter`
+scope is not consulted before a directory is created (there is no non-writing scope probe
+for a key that does not exist yet), so the directory can be created outside the view.
+
+### Functions
+
+| [`mkdir`](_autosummary/sshdol.ops.html.md#sshdol.ops.mkdir)(store, path, \*[, exist_ok])   | Create directory `path` (a key of `store`) on the server.              |
+|---------------------------------------------------------------------------------------|------------------------------------------------------------------------|
+| [`sync_to`](_autosummary/sshdol.ops.html.md#sshdol.ops.sync_to)(store, target, \*[, subdir]) | Rsync `store`'s remote tree (or its `subdir`) into the local `target`. |
+
+### sshdol.ops.mkdir(store, path, , exist_ok=False)
+
+Create directory `path` (a key of `store`) on the server.
+
+`path` is resolved through every layer of `store` first, so it lands where
+`store[path] = ...` would write. Returns nothing: index `store[path]` yourself for
+the sub-store (a value codec may not be able to decode a directory).
+
+* **Parameters:**
+  * **store** – an `SshFiles`, wrapped or not
+  * **path** – a key of `store`
+  * **exist_ok** ([`bool`](https://docs.python.org/3/builtins/functions.html#bool)) – if True, an existing directory is not an error
+* **Return type:**
+  [`None`](https://docs.python.org/3/builtins/constants.html#None)
+
+### sshdol.ops.sync_to(store, target, , subdir=None, \*\*kwargs)
+
+Rsync `store`’s remote tree (or its `subdir`) into the local `target`.
+
+`store` must be bare: an rsync is scoped by `rootdir`, which no key view can narrow,
+so a wrapped `store` (or wrapped `target`) raises `WrappedStoreError`. To sync one
+subdirectory, say so with `subdir` (a path relative to `rootdir`). Other keyword
+arguments are those of `SshFiles.sync_to`’s implementation: `delete_local_files_not_in_remote`,
+`delete_mode`, `recycle_bin`, `compress`, `extra_args`.
+
+* **Return type:**
+  [`None`](https://docs.python.org/3/builtins/constants.html#None)
 
 
 # about-this-build.html.md
@@ -543,18 +602,18 @@ text   | SshTextFilesReader | SshTextFiles       |
 
 # About this build
 
-This documentation was built on **2026-09-22 16:35 UTC** from commit <a href="https://github.com/i2mint/sshdol/commit/41be0cad7620e925aa25f6316c439ff80d2be24b"><code>41be0ca</code></a> on branch <code>master</code>, for **sshdol 0.0.9** (from <code>pyproject.toml</code>).
+This documentation was built on **2026-10-13 09:31 UTC** from commit <a href="https://github.com/i2mint/sshdol/commit/1d7546359f5b2167570b6c445a24e5dfdc66b221"><code>1d75463</code></a> on branch <code>master</code>, for **sshdol 0.0.10** (from <code>pyproject.toml</code>).
 
 #### WARNING
 The documentation and the package may be misaligned:
 
-- The documented version (0.0.9) is behind the latest release on PyPI (0.0.10): `pip install sshdol` gives newer code than these docs describe.
+- The documented version (0.0.10) is behind the latest release on PyPI (0.0.11): `pip install sshdol` gives newer code than these docs describe.
 
 ## Source
 
 |                     |                                                                                                                                                      |
 |---------------------|------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Commit              | <a href="https://github.com/i2mint/sshdol/commit/41be0cad7620e925aa25f6316c439ff80d2be24b"><code>41be0cad7620e925aa25f6316c439ff80d2be24b</code></a> |
+| Commit              | <a href="https://github.com/i2mint/sshdol/commit/1d7546359f5b2167570b6c445a24e5dfdc66b221"><code>1d7546359f5b2167570b6c445a24e5dfdc66b221</code></a> |
 | Branch              | <code>master</code>                                                                                                                                  |
 | Tags at this commit | none                                                                                                                                                 |
 | Working tree        | clean                                                                                                                                                |
@@ -565,18 +624,18 @@ The documentation and the package may be misaligned:
 |              |                                                                                            |
 |--------------|--------------------------------------------------------------------------------------------|
 | Repository   | <code>i2mint/sshdol</code>                                                                 |
-| Run          | <a href="https://github.com/i2mint/sshdol/actions/runs/35754936337">35754936337</a>        |
+| Run          | <a href="https://github.com/i2mint/sshdol/actions/runs/38376845909">38376845909</a>        |
 | Ref          | <code>refs/heads/master</code>                                                             |
-| Event commit | <code>41be0cad7620e925aa25f6316c439ff80d2be24b</code> (in the history of the built commit) |
+| Event commit | <code>1d7546359f5b2167570b6c445a24e5dfdc66b221</code> (in the history of the built commit) |
 
 ## Tools
 
 |          |         |
 |----------|---------|
-| epythet  | 0.2.12  |
+| epythet  | 0.2.15  |
 | Sphinx   | 9.1.0   |
 | docutils | 0.22.4  |
-| Python   | 3.12.14 |
+| Python   | 3.12.15 |
 
 ## Configuration as resolved
 
@@ -592,14 +651,14 @@ The documentation and the package may be misaligned:
 
 ## Package on PyPI
 
-Latest release: <a href="https://pypi.org/project/sshdol/0.0.10/">0.0.10</a>, newer than the documented version (0.0.9).
+Latest release: <a href="https://pypi.org/project/sshdol/0.0.11/">0.0.11</a>, newer than the documented version (0.0.10).
 
 ## Reproduce
 
 ```bash
 git clone https://github.com/i2mint/sshdol && cd sshdol
-git checkout 41be0cad7620e925aa25f6316c439ff80d2be24b
-pip install "epythet==0.2.12"
+git checkout 1d7546359f5b2167570b6c445a24e5dfdc66b221
+pip install "epythet==0.2.15"
 epythet quickstart . --ignore tests/ scrap/ examples/
 ```
 

@@ -26,3 +26,9 @@ sshdol.base
       SshTextFiles
       SshTextFilesReader
    
+   .. rubric:: Exceptions
+
+   .. autosummary::
+   
+      WrappedStoreError
+   

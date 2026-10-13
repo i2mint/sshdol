@@ -7,7 +7,7 @@
 <link rel="alternate" type="text/markdown" href="sshdol.base.html.md">
 <link rel="describedby" href="../llms.txt" type="text/markdown">
 <link rel="alternate" type="text/markdown" href="sshdol.base.html.md">
-<link rel="describedby" href="llms.txt"><link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="For AI agents" href="../ai-agents.html"><link rel="prev" title="sshdol" href="sshdol.html">
+<link rel="describedby" href="llms.txt"><link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="sshdol.ops" href="sshdol.ops.html"><link rel="prev" title="sshdol" href="sshdol.html">
 
     <!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
         <title>sshdol.base - sshdol</title>
@@ -205,6 +205,7 @@
 <li class="toctree-l1 current has-children"><a class="reference internal" href="../api.html">API reference</a><input aria-label="Toggle navigation of API reference" checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
 <li class="toctree-l2 current has-children"><a class="reference internal" href="sshdol.html">sshdol</a><input aria-label="Toggle navigation of sshdol" checked="" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
 <li class="toctree-l3 current current-page"><a class="current reference internal" href="#">sshdol.base</a></li>
+<li class="toctree-l3"><a class="reference internal" href="sshdol.ops.html">sshdol.ops</a></li>
 </ul>
 </li>
 </ul>
@@ -313,6 +314,16 @@
 </tbody>
 </table>
 </div>
+<p class="rubric">Exceptions</p>
+<div class="table-wrapper autosummary longtable docutils container">
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#sshdol.base.WrappedStoreError" title="sshdol.base.WrappedStoreError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">WrappedStoreError</span></code></a></p></td>
+<td><p>A scope-wide operation was given a <code class="docutils literal notranslate"><span class="pre">dol</span></code>-wrapped store or target (i2mint/sshdol#6).</p></td>
+</tr>
+</tbody>
+</table>
+</div>
 <dl class="py class">
 <dt class="sig sig-object py" id="sshdol.base.RejectUnknownHostKey">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sshdol.base.</span></span><span class="sig-name descname"><span class="pre">RejectUnknownHostKey</span></span><a class="reference internal" href="../_modules/sshdol/base.html#RejectUnknownHostKey"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sshdol.base.RejectUnknownHostKey" title="Link to this definition">¶</a></dt>
@@ -332,7 +343,7 @@ be passed to the calling application).</p>
 <dl class="py class">
 <dt class="sig sig-object py" id="sshdol.base.SshFiles">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sshdol.base.</span></span><span class="sig-name descname"><span class="pre">SshFiles</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">host</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">user</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">password</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">url</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">22</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key_filename</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rootdir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'.'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">include_hidden</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">include_directories</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dir_access</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">encoding</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_levels</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">create_dirs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strict_contains</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">allow_escape</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">missing_host_key_policy</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">_pinned_host_key</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/sshdol/base.html#SshFiles"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sshdol.base.SshFiles" title="Link to this definition">¶</a></dt>
-<dd><p>Bases: <a class="reference internal" href="#sshdol.base.SshFilesReader" title="sshdol.base.SshFilesReader"><code class="xref py py-class docutils literal notranslate"><span class="pre">SshFilesReader</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.MutableMapping" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">MutableMapping</span></code></a></p>
+<dd><p>Bases: <a class="reference internal" href="#sshdol.base.SshFilesReader" title="sshdol.base.SshFilesReader"><code class="xref py py-class docutils literal notranslate"><span class="pre">SshFilesReader</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.MutableMapping" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">MutableMapping</span></code></a></p>
 <p>Read-write interface to files on a remote SSH server.</p>
 <p class="rubric">Example</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">s</span> <span class="o">=</span> <span class="n">SshFiles</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="s2">"myserver"</span><span class="p">)</span>
@@ -348,61 +359,19 @@ be passed to the calling application).</p>
 </div>
 <dl class="py method">
 <dt class="sig sig-object py" id="sshdol.base.SshFiles.mkdir">
-<span class="sig-name descname"><span class="pre">mkdir</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exist_ok</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/sshdol/base.html#SshFiles.mkdir"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sshdol.base.SshFiles.mkdir" title="Link to this definition">¶</a></dt>
-<dd><p>Create a directory on the SSH server.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>path</strong> – Directory path to create</p></li>
-<li><p><strong>exist_ok</strong> – If True, don’t raise an error if directory already exists</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>A new instance for the created directory</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference internal" href="#sshdol.base.SshFiles" title="sshdol.base.SshFiles"><em>SshFiles</em></a></p>
-</dd>
-<dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#KeyError" title="(in Python v3.14)"><strong>KeyError</strong></a> – If directory cannot be created</p>
-</dd>
-</dl>
+<span class="sig-name descname"><span class="pre">mkdir</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/sshdol/base.html#SshFiles.mkdir"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sshdol.base.SshFiles.mkdir" title="Link to this definition">¶</a></dt>
+<dd><p>Removed: use <code class="docutils literal notranslate"><span class="pre">sshdol.ops.mkdir(store,</span> <span class="pre">path)</span></code>.</p>
+<p>A method runs bound to the leaf, so under a <code class="docutils literal notranslate"><span class="pre">dol</span></code> key transform it received the
+caller’s unmapped key and created the directory in the wrong place (i2mint/sshdol#6).</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="sshdol.base.SshFiles.sync_to">
-<span class="sig-name descname"><span class="pre">sync_to</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">target</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">delete_local_files_not_in_remote</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">delete_mode</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">recycle_bin</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'/home/runner/.local/share/Trash/files'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compress</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">extra_args</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/sshdol/base.html#SshFiles.sync_to"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sshdol.base.SshFiles.sync_to" title="Link to this definition">¶</a></dt>
-<dd><p>Synchronize remote rootdir to a local directory using rsync over SSH.</p>
-<p>This uses one local rsync invocation, which negotiates efficiently with the
-remote over SSH, minimizing round-trips and transferring only deltas.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>target</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a></span>) – Local directory to sync into (created if missing).</p></li>
-<li><p><strong>delete_local_files_not_in_remote</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></span>) – If True, remove local files that are not on remote (rsync –delete).</p></li>
-<li><p><strong>delete_mode</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.14)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Optional</span></code></a>[<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Literal</span></code></a>[<code class="docutils literal notranslate"><span class="pre">'after'</span></code>, <code class="docutils literal notranslate"><span class="pre">'before'</span></code>, <code class="docutils literal notranslate"><span class="pre">'delay'</span></code>, <code class="docutils literal notranslate"><span class="pre">'during'</span></code>, <code class="docutils literal notranslate"><span class="pre">'recycle'</span></code>]]</span>) – <p>Choose when/how deletion occurs. One of:</p>
-<ul>
-<li><p>’before’  -&gt; –delete-before</p></li>
-<li><p>’after’   -&gt; –delete-after</p></li>
-<li><p>’delay’   -&gt; –delete-delay</p></li>
-<li><p>’during’  -&gt; –delete-during</p></li>
-<li><p>’recycle’ -&gt; move would-be deletions into recycle_bin using –backup/–backup-dir
-If None, rsync uses its default timing when –delete is set.</p></li>
-</ul>
-</p></li>
-<li><p><strong>recycle_bin</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a></span>) – When delete_mode=’recycle’, directory to store deleted items.
-Defaults to the OS recycle location (macOS: ~/.Trash, Linux: ~/.local/share/Trash/files).</p></li>
-<li><p><strong>compress</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></span>) – If True, use -z compression.</p></li>
-<li><p><strong>extra_args</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">list</span></code></a>[<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a>] | <a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.14)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a></span>) – Additional rsync args (list of strings) to append.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#RuntimeError" title="(in Python v3.14)"><strong>RuntimeError</strong></a> – If rsync is unavailable or the sync fails.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.14)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a></span></p>
-</dd>
-</dl>
+<span class="sig-name descname"><span class="pre">sync_to</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/sshdol/base.html#SshFiles.sync_to"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sshdol.base.SshFiles.sync_to" title="Link to this definition">¶</a></dt>
+<dd><p>Removed: use <code class="docutils literal notranslate"><span class="pre">sshdol.ops.sync_to(store,</span> <span class="pre">target,</span> <span class="pre">subdir=...)</span></code>.</p>
+<p>rsync is scoped by <code class="docutils literal notranslate"><span class="pre">rootdir</span></code>, not by any key view, so called through a <code class="docutils literal notranslate"><span class="pre">dol</span></code>
+wrapper this method copied files the view hides and <code class="docutils literal notranslate"><span class="pre">--delete</span></code> pruned the wrong
+tree (i2mint/sshdol#6).</p>
 </dd></dl>
 
 </dd></dl>
@@ -410,7 +379,7 @@ Defaults to the OS recycle location (macOS: ~/.Trash, Linux: ~/.local/share/Tras
 <dl class="py class">
 <dt class="sig sig-object py" id="sshdol.base.SshFilesReader">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sshdol.base.</span></span><span class="sig-name descname"><span class="pre">SshFilesReader</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">host</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">user</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">password</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">url</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">22</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key_filename</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rootdir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'.'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">include_hidden</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">include_directories</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dir_access</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">encoding</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_levels</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">create_dirs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strict_contains</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">allow_escape</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">missing_host_key_policy</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">_pinned_host_key</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/sshdol/base.html#SshFilesReader"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sshdol.base.SshFilesReader" title="Link to this definition">¶</a></dt>
-<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Mapping" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Mapping</span></code></a></p>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Mapping" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Mapping</span></code></a></p>
 <p>Read-only interface to files on a remote SSH server.</p>
 <p class="rubric">Examples</p>
 <p>Connect using an SSH config alias</p>
@@ -442,13 +411,20 @@ Defaults to the OS recycle location (macOS: ~/.Trash, Linux: ~/.local/share/Tras
 <p>Read-only interface to text files on a remote SSH server.</p>
 </dd></dl>
 
+<dl class="py exception">
+<dt class="sig sig-object py" id="sshdol.base.WrappedStoreError">
+<span class="property"><span class="k"><span class="pre">exception</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sshdol.base.</span></span><span class="sig-name descname"><span class="pre">WrappedStoreError</span></span><a class="reference internal" href="../_modules/sshdol/base.html#WrappedStoreError"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sshdol.base.WrappedStoreError" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ValueError</span></code></a></p>
+<p>A scope-wide operation was given a <code class="docutils literal notranslate"><span class="pre">dol</span></code>-wrapped store or target (i2mint/sshdol#6).</p>
+</dd></dl>
+
 <dl class="py function">
 <dt class="sig sig-object py" id="sshdol.base.escapes_root">
 <span class="sig-prename descclassname"><span class="pre">sshdol.base.</span></span><span class="sig-name descname"><span class="pre">escapes_root</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/sshdol/base.html#escapes_root"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sshdol.base.escapes_root" title="Link to this definition">¶</a></dt>
 <dd><p>Whether a (normalized, <code class="docutils literal notranslate"><span class="pre">/</span></code>-separated) key path points outside the root.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></span></p>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></span></p>
 </dd>
 </dl>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">escapes_root</span><span class="p">(</span><span class="s1">'a/b.txt'</span><span class="p">),</span> <span class="n">escapes_root</span><span class="p">(</span><span class="s1">'a/../b'</span><span class="p">),</span> <span class="n">escapes_root</span><span class="p">(</span><span class="s1">''</span><span class="p">)</span>
@@ -471,7 +447,7 @@ Defaults to the OS recycle location (macOS: ~/.Trash, Linux: ~/.local/share/Tras
 <dd class="field-even"><p>Dictionary with SSH configuration parameters</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a></p>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.15)"><em>dict</em></a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -491,10 +467,10 @@ Only existing files are returned.</p>
 <dd><p>Normalize a path to use forward slashes and handle trailing slashes.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>path</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a></span>) – Path to normalize</p>
+<dd class="field-odd"><p><strong>path</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a></span>) – Path to normalize</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a></span></p>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a></span></p>
 </dd>
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
 <dd class="field-odd"><p>Normalized path</p>
@@ -542,10 +518,10 @@ A key that <em>changed</em> is always refused by paramiko.</p>
 <dd><p>Split a path into directory and file parts.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>path</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a></span>) – Path to split</p>
+<dd class="field-odd"><p><strong>path</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a></span>) – Path to split</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tuple</span></code></a>[<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a>, <a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a>]</span></p>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tuple</span></code></a>[<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a>, <a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a>]</span></p>
 </dd>
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
 <dd class="field-odd"><p>Tuple of (directory_part, file_part)</p>
@@ -560,12 +536,12 @@ A key that <em>changed</em> is always refused by paramiko.</p>
       <footer>
         
         <div class="related-pages">
-          <a class="next-page" href="../ai-agents.html">
+          <a class="next-page" href="sshdol.ops.html">
               <div class="page-info">
                 <div class="context">
                   <span>Next</span>
                 </div>
-                <div class="title">For AI agents</div>
+                <div class="title">sshdol.ops</div>
               </div>
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>
@@ -619,6 +595,7 @@ A key that <em>changed</em> is always refused by paramiko.</p>
 <li><a class="reference internal" href="#sshdol.base.SshFilesReader"><code class="docutils literal notranslate"><span class="pre">SshFilesReader</span></code></a></li>
 <li><a class="reference internal" href="#sshdol.base.SshTextFiles"><code class="docutils literal notranslate"><span class="pre">SshTextFiles</span></code></a></li>
 <li><a class="reference internal" href="#sshdol.base.SshTextFilesReader"><code class="docutils literal notranslate"><span class="pre">SshTextFilesReader</span></code></a></li>
+<li><a class="reference internal" href="#sshdol.base.WrappedStoreError"><code class="docutils literal notranslate"><span class="pre">WrappedStoreError</span></code></a></li>
 <li><a class="reference internal" href="#sshdol.base.escapes_root"><code class="docutils literal notranslate"><span class="pre">escapes_root()</span></code></a></li>
 <li><a class="reference internal" href="#sshdol.base.get_ssh_config_for_host"><code class="docutils literal notranslate"><span class="pre">get_ssh_config_for_host()</span></code></a></li>
 <li><a class="reference internal" href="#sshdol.base.known_hosts_files"><code class="docutils literal notranslate"><span class="pre">known_hosts_files()</span></code></a></li>
@@ -637,7 +614,7 @@ A key that <em>changed</em> is always refused by paramiko.</p>
       
     </aside>
   </div>
-</div><script src="../_static/documentation_options.js?v=bf6d79ad"></script>
+</div><script src="../_static/documentation_options.js?v=4bb83394"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/scripts/furo.js?v=46bd48cc"></script>

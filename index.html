@@ -205,6 +205,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="api.html">API reference</a><input aria-label="Toggle navigation of API reference" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l2 has-children"><a class="reference internal" href="_autosummary/sshdol.html">sshdol</a><input aria-label="Toggle navigation of sshdol" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l3"><a class="reference internal" href="_autosummary/sshdol.base.html">sshdol.base</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_autosummary/sshdol.ops.html">sshdol.ops</a></li>
 </ul>
 </li>
 </ul>
@@ -318,35 +319,36 @@
 <ul class="simple">
 <li><p>High-performance (recommended for many files):</p></li>
 </ul>
-<p>Use <code class="docutils literal notranslate"><span class="pre">SshFiles.sync_to</span></code>, which leverages <code class="docutils literal notranslate"><span class="pre">rsync</span></code> under the hood for orders-of-magnitude faster syncs. It only supports local folder targets (or objects that expose a filesystem root via a <code class="docutils literal notranslate"><span class="pre">rootdir</span></code> attribute, e.g., <code class="docutils literal notranslate"><span class="pre">dol.Files</span></code>).</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">sshdol.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">SshFiles</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">dol</span>
+<p>Use <code class="docutils literal notranslate"><span class="pre">sshdol.sync_to(src,</span> <span class="pre">target)</span></code>, which leverages <code class="docutils literal notranslate"><span class="pre">rsync</span></code> under the hood for orders-of-magnitude faster syncs. It only supports local folder targets (a path).</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">sshdol</span><span class="w"> </span><span class="kn">import</span> <span class="n">SshFiles</span><span class="p">,</span> <span class="n">sync_to</span>
 
 <span class="n">src</span> <span class="o">=</span> <span class="n">SshFiles</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="s2">"myserver"</span><span class="p">,</span> <span class="n">rootdir</span><span class="o">=</span><span class="s2">"/remote/path"</span><span class="p">)</span>
 
 <span class="c1"># Sync to a local path (fast; uses rsync)</span>
-<span class="n">src</span><span class="o">.</span><span class="n">sync_to</span><span class="p">(</span><span class="s2">"/local/target/folder"</span><span class="p">)</span>
+<span class="n">sync_to</span><span class="p">(</span><span class="n">src</span><span class="p">,</span> <span class="s2">"/local/target/folder"</span><span class="p">)</span>
 
-<span class="c1"># Or sync to a dol.Files instance (it has a .rootdir pointing to a local folder)</span>
-<span class="n">dst</span> <span class="o">=</span> <span class="n">dol</span><span class="o">.</span><span class="n">Files</span><span class="p">(</span><span class="s2">"/local/target/folder"</span><span class="p">)</span>
-<span class="n">src</span><span class="o">.</span><span class="n">sync_to</span><span class="p">(</span><span class="n">dst</span><span class="p">)</span>
+<span class="c1"># A pathlib.Path works too. An object with a .rootdir (even a dol.Files) is refused:</span>
+<span class="c1"># its view may be narrower than its rootdir, and --delete would prune the rest.</span>
 </pre></div>
 </div>
 <p>Notes:</p>
 <ul class="simple">
 <li><p>Requires <code class="docutils literal notranslate"><span class="pre">rsync</span></code> installed locally.</p></li>
-<li><p>Target must be a local filesystem path or an object with a <code class="docutils literal notranslate"><span class="pre">.rootdir</span></code> that is one (e.g., <code class="docutils literal notranslate"><span class="pre">dol.Files</span></code>).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">sync_to</span></code> is scoped by the store’s <code class="docutils literal notranslate"><span class="pre">rootdir</span></code>, not by any key view (this is why it is a free function: <code class="docutils literal notranslate"><span class="pre">SshFiles.sync_to</span></code> was removed, because a method of a <code class="docutils literal notranslate"><span class="pre">dol</span></code>-wrapped store runs on the leaf, i2mint/sshdol#6). It therefore refuses a store wrapped in a <code class="docutils literal notranslate"><span class="pre">dol</span></code> key codec or filter (<code class="docutils literal notranslate"><span class="pre">WrappedStoreError</span></code>), since it would copy files the view hides and <code class="docutils literal notranslate"><span class="pre">--delete</span></code> against the wrong tree. State a sub-scope explicitly: <code class="docutils literal notranslate"><span class="pre">sync_to(src,</span> <span class="pre">&quot;/local/dir&quot;,</span> <span class="pre">subdir=&quot;projects&quot;)</span></code>. The <code class="docutils literal notranslate"><span class="pre">target</span></code> must be a path (for a <code class="docutils literal notranslate"><span class="pre">dol.Files</span></code> target, pass its directory).</p></li>
+<li><p>Target must be a local filesystem path.</p></li>
 <li><p>You can control deletion timing and safety:</p></li>
 </ul>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Remove local files not present on remote (mirror behavior)</span>
-<span class="n">src</span><span class="o">.</span><span class="n">sync_to</span><span class="p">(</span>
+<span class="n">sync_to</span><span class="p">(</span>
+    <span class="n">src</span><span class="p">,</span>
     <span class="s2">"/local/target/folder"</span><span class="p">,</span>
     <span class="n">delete_local_files_not_in_remote</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
     <span class="n">delete_mode</span><span class="o">=</span><span class="s2">"during"</span><span class="p">,</span>  <span class="c1"># 'before' | 'after' | 'delay' | 'during'</span>
 <span class="p">)</span>
 
 <span class="c1"># “Recycle” deletions instead of permanently deleting them</span>
-<span class="n">src</span><span class="o">.</span><span class="n">sync_to</span><span class="p">(</span>
+<span class="n">sync_to</span><span class="p">(</span>
+    <span class="n">src</span><span class="p">,</span>
     <span class="s2">"/local/target/folder"</span><span class="p">,</span>
     <span class="n">delete_mode</span><span class="o">=</span><span class="s2">"recycle"</span><span class="p">,</span>  <span class="c1"># uses rsync --backup/--backup-dir</span>
     <span class="n">recycle_bin</span><span class="o">=</span><span class="s2">"~/.Trash"</span><span class="p">,</span>  <span class="c1"># optional (defaults OS-specifically)</span>
@@ -462,10 +464,15 @@
 </section>
 <section id="creating-a-new-directory">
 <h3>Creating a new directory<a class="headerlink" href="#creating-a-new-directory" title="Link to this heading">¶</a></h3>
-<p>Now, know that your ssh stores have a <code class="docutils literal notranslate"><span class="pre">mkdir</span></code> where you can make a directory,
-which can then be written in:</p>
-<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="c1"># Create a new directory</span>
-<span class="n">projects_dir</span> <span class="o">=</span> <span class="n">s</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="s2">"projects"</span><span class="p">)</span>
+<p>Now, know that you can make a directory with <code class="docutils literal notranslate"><span class="pre">sshdol.mkdir(store,</span> <span class="pre">path)</span></code>,
+after which it can be written in. (It is a function rather than a method so that it
+maps the key through any <code class="docutils literal notranslate"><span class="pre">dol</span></code> key codec you have wrapped the store in; the old
+<code class="docutils literal notranslate"><span class="pre">SshFiles.mkdir</span></code> method was removed, i2mint/sshdol#6.)</p>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">sshdol</span><span class="w"> </span><span class="kn">import</span> <span class="n">mkdir</span>
+
+<span class="c1"># Create a new directory</span>
+<span class="n">mkdir</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="s2">"projects"</span><span class="p">)</span>
+<span class="n">projects_dir</span> <span class="o">=</span> <span class="n">s</span><span class="p">[</span><span class="s2">"projects"</span><span class="p">]</span>
 
 <span class="c1"># Write files in the new directory</span>
 <span class="n">projects_dir</span><span class="p">[</span><span class="s2">"README.md"</span><span class="p">]</span> <span class="o">=</span> <span class="sa">b</span><span class="s2">"# Projects Directory"</span>
@@ -504,7 +511,7 @@ directories automatically, at the moment you want to write in them
 </section>
 </section>
 
-<p class="epythet-provenance" style="font-size:.8em;opacity:.65;margin-top:2.5em;text-align:right">built 2026-09-22 16:35 UTC from <a href="https://github.com/i2mint/sshdol/commit/41be0cad7620e925aa25f6316c439ff80d2be24b">41be0ca</a> (master) · sshdol 0.0.9 · <a href="about-this-build.html">about this build</a></p>
+<p class="epythet-provenance" style="font-size:.8em;opacity:.65;margin-top:2.5em;text-align:right">built 2026-10-13 09:31 UTC from <a href="https://github.com/i2mint/sshdol/commit/1d7546359f5b2167570b6c445a24e5dfdc66b221">1d75463</a> (master) · sshdol 0.0.10 · <a href="about-this-build.html">about this build</a></p>
         </article>
       </div>
       <footer>
@@ -579,7 +586,7 @@ directories automatically, at the moment you want to write in them
       
     </aside>
   </div>
-</div><script src="_static/documentation_options.js?v=bf6d79ad"></script>
+</div><script src="_static/documentation_options.js?v=4bb83394"></script>
     <script src="_static/doctools.js?v=fd6eb6e6"></script>
     <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="_static/scripts/furo.js?v=46bd48cc"></script>

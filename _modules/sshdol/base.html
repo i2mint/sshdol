@@ -202,6 +202,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../api.html">API reference</a><input aria-label="Toggle navigation of API reference" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../_autosummary/sshdol.html">sshdol</a><input aria-label="Toggle navigation of sshdol" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l3"><a class="reference internal" href="../../_autosummary/sshdol.base.html">sshdol.base</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../_autosummary/sshdol.ops.html">sshdol.ops</a></li>
 </ul>
 </li>
 </ul>
@@ -265,6 +266,7 @@
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">MutableMapping</span><span class="p">,</span> <span class="n">Iterator</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">stat</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">subprocess</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">shutil</span>
@@ -512,6 +514,45 @@
     <span class="n">parts</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">"/"</span><span class="p">)</span>
     <span class="k">return</span> <span class="s2">"/"</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">parts</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]),</span> <span class="n">parts</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span></div>
 
+
+
+<span class="n">_MOVED</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="s2">"SshFiles.</span><span class="si">{old}</span><span class="s2">() was removed: a method of a dol-wrapped store runs bound to the leaf and "</span>
+    <span class="s2">"sees the caller's unmapped key / the leaf's whole rootdir (i2mint/sshdol#6). "</span>
+    <span class="s2">"Use </span><span class="si">{new}</span><span class="s2">."</span>
+<span class="p">)</span>
+
+
+<div class="viewcode-block" id="WrappedStoreError">
+<a class="viewcode-back" href="../../_autosummary/sshdol.base.html#sshdol.base.WrappedStoreError">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">WrappedStoreError</span><span class="p">(</span><span class="ne">ValueError</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""A scope-wide operation was given a ``dol``-wrapped store or target (i2mint/sshdol#6)."""</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_is_wrapped</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""True if ``obj`` is a ``dol`` wrapper layer (it holds its inner store as ``.store``)."""</span>
+    <span class="k">return</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">PathLike</span><span class="p">))</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="s2">"store"</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_resolve_sync_target</span><span class="p">(</span><span class="n">target</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The local directory a ``sync_to`` target denotes: a path (``str`` / ``PathLike``).</span>
+
+<span class="sd">    An object with a ``.rootdir`` (even a plain ``dol.Files``) is refused: its ``.rootdir``</span>
+<span class="sd">    is the leaf's, and the view it shows may be narrower (key codec, filter, ``subpath``,</span>
+<span class="sd">    ``max_levels``, hidden files...), so ``rsync --delete`` would prune files the view never</span>
+<span class="sd">    showed (i2mint/sshdol#6). Pass the local directory path.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">PathLike</span><span class="p">)):</span>
+        <span class="k">return</span> <span class="n">os</span><span class="o">.</span><span class="n">fspath</span><span class="p">(</span><span class="n">target</span><span class="p">)</span>
+    <span class="k">raise</span> <span class="n">WrappedStoreError</span><span class="p">(</span>
+        <span class="sa">f</span><span class="s2">"sync_to target must be a local directory path, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">target</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">: an "</span>
+        <span class="sa">f</span><span class="s2">"object's .rootdir may be wider than the view it shows, and rsync --delete would "</span>
+        <span class="sa">f</span><span class="s2">"act on all of it (i2mint/sshdol#6). Pass the directory path instead."</span>
+    <span class="p">)</span>
+
+
+<span class="n">_SAFE_SUBDIR</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">"^[\w./@%+=:,-]+$"</span><span class="p">)</span>  <span class="c1"># no spaces/shell metacharacters (old rsyncs)</span>
 
 
 <div class="viewcode-block" id="SshFilesReader">
@@ -1161,21 +1202,11 @@
                 <span class="k">raise</span>
             <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Error deleting </span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 
-<div class="viewcode-block" id="SshFiles.mkdir">
-<a class="viewcode-back" href="../../_autosummary/sshdol.base.html#sshdol.base.SshFiles.mkdir">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">mkdir</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">"""</span>
-<span class="sd">        Create a directory on the SSH server.</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_mkdir_path</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Create directory ``path`` (leaf coordinates, already mapped) under rootdir.</span>
 
-<span class="sd">        Args:</span>
-<span class="sd">            path: Directory path to create</span>
-<span class="sd">            exist_ok: If True, don't raise an error if directory already exists</span>
-
-<span class="sd">        Returns:</span>
-<span class="sd">            SshFiles: A new instance for the created directory</span>
-
-<span class="sd">        Raises:</span>
-<span class="sd">            KeyError: If directory cannot be created</span>
+<span class="sd">        Returns the normalized path. This is the primitive shared by the ``mkdir`` method</span>
+<span class="sd">        and :func:`sshdol.ops.mkdir`.</span>
 <span class="sd">        """</span>
         <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_key_to_path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
 
@@ -1197,9 +1228,17 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">_sftp</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
             <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Failed to create directory </span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">path</span>
 
-        <span class="c1"># Return a new instance for the created directory</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="p">[</span><span class="n">path</span><span class="p">]</span></div>
+<div class="viewcode-block" id="SshFiles.mkdir">
+<a class="viewcode-back" href="../../_autosummary/sshdol.base.html#sshdol.base.SshFiles.mkdir">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">mkdir</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Removed: use ``sshdol.ops.mkdir(store, path)``.</span>
+
+<span class="sd">        A method runs bound to the leaf, so under a ``dol`` key transform it received the</span>
+<span class="sd">        caller's unmapped key and created the directory in the wrong place (i2mint/sshdol#6).</span>
+<span class="sd">        """</span>
+        <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span><span class="n">_MOVED</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">old</span><span class="o">=</span><span class="s2">"mkdir"</span><span class="p">,</span> <span class="n">new</span><span class="o">=</span><span class="s2">"sshdol.ops.mkdir(store, path)"</span><span class="p">))</span></div>
 
 
     <span class="c1"># -----------------------</span>
@@ -1207,10 +1246,23 @@
     <span class="c1"># -----------------------</span>
 <div class="viewcode-block" id="SshFiles.sync_to">
 <a class="viewcode-back" href="../../_autosummary/sshdol.base.html#sshdol.base.SshFiles.sync_to">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">sync_to</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sync_to</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Removed: use ``sshdol.ops.sync_to(store, target, subdir=...)``.</span>
+
+<span class="sd">        rsync is scoped by ``rootdir``, not by any key view, so called through a ``dol``</span>
+<span class="sd">        wrapper this method copied files the view hides and ``--delete`` pruned the wrong</span>
+<span class="sd">        tree (i2mint/sshdol#6).</span>
+<span class="sd">        """</span>
+        <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span>
+            <span class="n">_MOVED</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">old</span><span class="o">=</span><span class="s2">"sync_to"</span><span class="p">,</span> <span class="n">new</span><span class="o">=</span><span class="s2">"sshdol.ops.sync_to(store, target, subdir=...)"</span><span class="p">)</span>
+        <span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_sync_to</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">target</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
+        <span class="n">subdir</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">delete_local_files_not_in_remote</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">delete_mode</span><span class="p">:</span> <span class="kc">None</span>
         <span class="o">|</span> <span class="p">(</span><span class="n">Literal</span><span class="p">[</span><span class="s2">"after"</span><span class="p">,</span> <span class="s2">"before"</span><span class="p">,</span> <span class="s2">"delay"</span><span class="p">,</span> <span class="s2">"during"</span><span class="p">,</span> <span class="s2">"recycle"</span><span class="p">])</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -1224,7 +1276,10 @@
 <span class="sd">        remote over SSH, minimizing round-trips and transferring only deltas.</span>
 
 <span class="sd">        Args:</span>
-<span class="sd">            target: Local directory to sync into (created if missing).</span>
+<span class="sd">            target: Local directory (a path string, already resolved) to sync into</span>
+<span class="sd">                (created if missing).</span>
+<span class="sd">            subdir: Directory, relative to rootdir, to sync instead of all of rootdir.</span>
+<span class="sd">                Must stay inside rootdir.</span>
 <span class="sd">            delete_local_files_not_in_remote: If True, remove local files that are not on remote (rsync --delete).</span>
 <span class="sd">            delete_mode: Choose when/how deletion occurs. One of:</span>
 <span class="sd">                - 'before'  -&gt; --delete-before</span>
@@ -1241,16 +1296,6 @@
 <span class="sd">        Raises:</span>
 <span class="sd">            RuntimeError: If rsync is unavailable or the sync fails.</span>
 <span class="sd">        """</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="n">Path</span><span class="p">):</span>
-            <span class="n">target</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">target</span><span class="p">)</span>
-        <span class="k">elif</span> <span class="p">(</span>
-            <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>  <span class="c1"># target is not a string</span>
-            <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="s2">"rootdir"</span><span class="p">)</span>  <span class="c1"># and has a rootdir attribute</span>
-            <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">target</span><span class="o">.</span><span class="n">rootdir</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>  <span class="c1"># which is a string</span>
-            <span class="ow">and</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">target</span><span class="o">.</span><span class="n">rootdir</span><span class="p">)</span>  <span class="c1"># and exists as a directory</span>
-        <span class="p">):</span>  <span class="c1"># then take that as the target</span>
-            <span class="n">target</span> <span class="o">=</span> <span class="n">target</span><span class="o">.</span><span class="n">rootdir</span>
-
         <span class="c1"># Ensure local destination exists</span>
         <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
@@ -1306,7 +1351,15 @@
 
         <span class="c1"># Source and destination (operands at the end)</span>
         <span class="c1"># Ensure trailing slash to copy contents of rootdir into target directory</span>
-        <span class="n">remote_src</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_conn_user</span><span class="si">}</span><span class="s2">@</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_conn_host</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">rootdir</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s1">'/'</span><span class="p">)</span><span class="si">}</span><span class="s2">/"</span>
+        <span class="n">remote_root</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rootdir</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s2">"/"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">subdir</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">_SAFE_SUBDIR</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">subdir</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"subdir has characters outside [</span><span class="se">\\</span><span class="s2">w./@%+=:,-]: </span><span class="si">{</span><span class="n">subdir</span><span class="si">!r}</span><span class="s2"> "</span>
+                    <span class="s2">"(rsync may split them in the remote shell)"</span>
+                <span class="p">)</span>
+            <span class="n">remote_root</span> <span class="o">+=</span> <span class="s2">"/"</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">_key_to_path</span><span class="p">(</span><span class="n">subdir</span><span class="p">)</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s2">"/"</span><span class="p">)</span>
+        <span class="n">remote_src</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_conn_user</span><span class="si">}</span><span class="s2">@</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_conn_host</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">remote_root</span><span class="si">}</span><span class="s2">/"</span>
         <span class="n">local_dst</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="s2">""</span><span class="p">)</span>
         <span class="n">rsync_cmd</span> <span class="o">+=</span> <span class="p">[</span><span class="n">remote_src</span><span class="p">,</span> <span class="n">local_dst</span><span class="p">]</span>
 
@@ -1322,7 +1375,6 @@
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">"rsync failed with code </span><span class="si">{</span><span class="n">e</span><span class="o">.</span><span class="n">returncode</span><span class="si">}</span><span class="s2">:</span><span class="se">\n</span><span class="s2">STDOUT:</span><span class="se">\n</span><span class="si">{</span><span class="n">e</span><span class="o">.</span><span class="n">stdout</span><span class="si">}</span><span class="se">\n</span><span class="s2">STDERR:</span><span class="se">\n</span><span class="si">{</span><span class="n">e</span><span class="o">.</span><span class="n">stderr</span><span class="si">}</span><span class="s2">"</span>
             <span class="p">)</span></div>
-</div>
 
 
 
@@ -1380,7 +1432,7 @@
       
     </aside>
   </div>
-</div><script src="../../_static/documentation_options.js?v=bf6d79ad"></script>
+</div><script src="../../_static/documentation_options.js?v=4bb83394"></script>
     <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/scripts/furo.js?v=46bd48cc"></script>
