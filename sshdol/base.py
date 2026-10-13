@@ -22,6 +22,7 @@ from typing import (
     Literal,
 )
 from collections.abc import Mapping, MutableMapping, Iterator
+import errno
 import os
 import re
 import stat
@@ -373,7 +374,10 @@ class SshFilesReader(Mapping):
                        None = unlimited depth
                        (Design notes: https://github.com/i2mint/sshdol/issues/1#issue-2910364290)
             create_dirs: Whether to create missing directories on write
-                       (only relevant for writable stores)
+                       (only relevant for writable stores), including a missing
+                       ``rootdir``. A missing ``rootdir`` is otherwise a
+                       ``FileNotFoundError`` (it used to silently fall back to the
+                       login directory).
             strict_contains: If True, __contains__ will raise KeyError for paths beyond max_levels
                             If False (default), it will return False for such paths
                             Design notes: https://github.com/i2mint/sshdol/issues/1#issuecomment-2714508482
@@ -497,9 +501,12 @@ class SshFilesReader(Mapping):
         if rootdir != ".":
             try:
                 self._sftp.chdir(rootdir)
-            except OSError:
-                # If directory doesn't exist, don't error - it will be handled by operations
-                pass
+            except OSError as e:
+                if e.errno != errno.ENOENT:
+                    raise
+                # Do not carry on in the login directory, which every operation would
+                # then address instead of rootdir (i2mint/sshdol#14).
+                self._on_missing_rootdir(rootdir)
 
     def _key_to_path(self, k):
         """Normalize key ``k`` to a path, refusing (``KeyError``) one that leaves rootdir."""
@@ -511,6 +518,12 @@ class SshFilesReader(Mapping):
                 f"Key points outside rootdir (pass allow_escape=True to allow): {k}"
             )
         return path
+
+    def _on_missing_rootdir(self, rootdir):
+        """Called when ``rootdir`` does not exist on the server: a reader refuses."""
+        raise FileNotFoundError(
+            errno.ENOENT, f"rootdir does not exist on the server: {rootdir!r}"
+        )
 
     def _real_root(self):
         """Absolute, symlink-free path of ``rootdir`` on the server (cached)."""
@@ -886,6 +899,24 @@ class SshFiles(SshFilesReader, MutableMapping):
         >>> s = SshFiles(host="myserver", create_dirs=True)  # doctest: +SKIP
         >>> s['dir1/dir2/file.txt'] = b'Nested content'  # doctest: +SKIP
     """
+
+    def _on_missing_rootdir(self, rootdir):
+        """Create a missing ``rootdir`` (with its parents) if ``create_dirs``, else refuse."""
+        if not self._create_dirs:
+            raise FileNotFoundError(
+                errno.ENOENT,
+                f"rootdir does not exist on the server: {rootdir!r} "
+                "(pass create_dirs=True to create it)",
+            )
+        prefix = "/" if rootdir.startswith("/") else ""
+        for part in (p for p in rootdir.split("/") if p):
+            prefix = f"{prefix}{part}"
+            try:
+                self._sftp.stat(prefix)
+            except OSError:
+                self._sftp.mkdir(prefix)
+            prefix += "/"
+        self._sftp.chdir(rootdir)
 
     def _ensure_directory_exists(self, dir_path):
         """
