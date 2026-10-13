@@ -197,3 +197,47 @@ def test_sync_to_subdir_control_characters_refused(stores, tmp_path):
     store, _, _ = stores
     with pytest.raises(ValueError, match="control"):
         sync_to(store, tmp_path / "d", subdir="a\nb")
+
+
+@pytest.mark.parametrize("pattern", ["ln[k]", "l?k", "l*", "*", "[l]nk", "sub/[.][.]"])
+def test_sync_to_subdir_wildcards_cannot_reach_through_a_link(stores, tmp_path, pattern):
+    """The remote rsync expands wildcards itself, past the symlink check on the literal name."""
+    store, sftp, outside = stores
+    sftp.symlink(outside, BASE + "/root/lnk")
+    with pytest.raises(ValueError, match="wildcard"):
+        sync_to(store, tmp_path / "d", subdir=pattern)
+    assert not (tmp_path / "d").exists() or not list((tmp_path / "d").iterdir())
+
+
+@pytest.mark.parametrize(
+    "out, expected",
+    [
+        ("rsync  version 3.4.1  protocol version 32", (3, 4, 1)),
+        ("rsync  version v3.2.7  protocol version 31", (3, 2, 7)),
+        ("rsync  version 3.2.4pre1  protocol version 31", (3, 2, 4)),
+    ],
+)
+def test_local_rsync_version_parsing(monkeypatch, out, expected):
+    import subprocess
+
+    import sshdol.base as base
+
+    monkeypatch.setattr(base, "_rsync_version_cache", None)
+    monkeypatch.setattr(
+        base.subprocess,
+        "run",
+        lambda *a, **k: subprocess.CompletedProcess(a, 0, stdout=out),
+    )
+    assert base.local_rsync_version() == expected
+
+
+def test_failed_rsync_version_is_not_cached(monkeypatch):
+    import sshdol.base as base
+
+    monkeypatch.setattr(base, "_rsync_version_cache", None)
+
+    def boom(*a, **k):
+        raise OSError("no rsync")
+
+    monkeypatch.setattr(base.subprocess, "run", boom)
+    assert base.local_rsync_version() == () and base._rsync_version_cache is None
