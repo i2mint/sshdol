@@ -4,6 +4,7 @@ import os
 import socket
 import pytest
 from sshdol.base import SshFiles, get_ssh_config_for_host
+from sshdol.ops import sync_to
 from sshdol.tests.utils_for_testing import (
     empty_test_store,
     MAX_TEST_KEYS,
@@ -324,7 +325,7 @@ def test_sync_to(tmp_path):
 
     # Sync to local temp dir
     local_dir = tmp_path / "mirror"
-    s.sync_to(str(local_dir))
+    sync_to(s, str(local_dir))
 
     # Verify files exist locally with correct contents
     a_path = local_dir / "A.txt"

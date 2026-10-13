@@ -3,6 +3,7 @@
 import paramiko
 import pytest
 
+from sshdol.ops import mkdir
 from sshdol.base import (
     RejectUnknownHostKey,
     SshFiles,
@@ -31,7 +32,7 @@ def test_escaping_keys_are_refused(key):
         lambda: s[key],
         lambda: s.__setitem__(key, b"x"),
         lambda: s.__delitem__(key),
-        lambda: s.mkdir(key),
+        lambda: mkdir(s, key),
     ):
         with pytest.raises(KeyError, match="outside rootdir"):
             op()

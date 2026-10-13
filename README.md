@@ -72,37 +72,38 @@ You can also use higher-level helpers such as `xdol.update_with_policy` to contr
 
 - High-performance (recommended for many files):
 
-Use `SshFiles.sync_to`, which leverages `rsync` under the hood for orders-of-magnitude faster syncs. It only supports local folder targets (or objects that expose a filesystem root via a `rootdir` attribute, e.g., `dol.Files`).
+Use `sshdol.sync_to(src, target)`, which leverages `rsync` under the hood for orders-of-magnitude faster syncs. It only supports local folder targets (a path).
 
 ```python
-from sshdol.base import SshFiles
-import dol
+from sshdol import SshFiles, sync_to
 
 src = SshFiles(host="myserver", rootdir="/remote/path")
 
 # Sync to a local path (fast; uses rsync)
-src.sync_to("/local/target/folder")
+sync_to(src, "/local/target/folder")
 
-# Or sync to a dol.Files instance (it has a .rootdir pointing to a local folder)
-dst = dol.Files("/local/target/folder")
-src.sync_to(dst)
+# A pathlib.Path works too. An object with a .rootdir (even a dol.Files) is refused:
+# its view may be narrower than its rootdir, and --delete would prune the rest.
 ```
 
 Notes:
 - Requires `rsync` installed locally.
-- Target must be a local filesystem path or an object with a `.rootdir` that is one (e.g., `dol.Files`).
+- `sync_to` is scoped by the store's `rootdir`, not by any key view (this is why it is a free function: `SshFiles.sync_to` was removed, because a method of a `dol`-wrapped store runs on the leaf, i2mint/sshdol#6). It therefore refuses a store wrapped in a `dol` key codec or filter (`WrappedStoreError`), since it would copy files the view hides and `--delete` against the wrong tree. State a sub-scope explicitly: `sync_to(src, "/local/dir", subdir="projects")`. The `target` must be a path (for a `dol.Files` target, pass its directory).
+- Target must be a local filesystem path.
 - You can control deletion timing and safety:
 
 ```python
 # Remove local files not present on remote (mirror behavior)
-src.sync_to(
+sync_to(
+    src,
     "/local/target/folder",
     delete_local_files_not_in_remote=True,
     delete_mode="during",  # 'before' | 'after' | 'delay' | 'during'
 )
 
 # “Recycle” deletions instead of permanently deleting them
-src.sync_to(
+sync_to(
+    src,
     "/local/target/folder",
     delete_mode="recycle",  # uses rsync --backup/--backup-dir
     recycle_bin="~/.Trash",  # optional (defaults OS-specifically)
@@ -225,12 +226,18 @@ text = t["notes.txt"]  # Returns 'Hello, this is a text note'
 
 ### Creating a new directory
 
-Now, know that your ssh stores have a `mkdir` where you can make a directory, 
-which can then be written in:
+
+Now, know that you can make a directory with `sshdol.mkdir(store, path)`, 
+after which it can be written in. (It is a function rather than a method so that it
+maps the key through any `dol` key codec you have wrapped the store in; the old
+`SshFiles.mkdir` method was removed, i2mint/sshdol#6.)
 
 ```py
+from sshdol import mkdir
+
 # Create a new directory
-projects_dir = s.mkdir("projects")
+mkdir(s, "projects")
+projects_dir = s["projects"]
 
 # Write files in the new directory
 projects_dir["README.md"] = b"# Projects Directory"
