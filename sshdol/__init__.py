@@ -16,3 +16,5 @@ from sshdol.base import (
     SshTextFilesReader,  # Read-only interface to text files on a remote SSH server.
     SshTextFiles,  # Read-write interface to text files on a remote SSH server.
 )
+from sshdol.base import WrappedStoreError  # Raised when a scope-wide op meets a dol wrapper.
+from sshdol.ops import mkdir, sync_to  # Key-/scope-aware free functions (work on wrapped stores).

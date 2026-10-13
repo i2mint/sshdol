@@ -90,6 +90,7 @@ src.sync_to(dst)
 
 Notes:
 - Requires `rsync` installed locally.
+- `sync_to` is scoped by the store's `rootdir`, not by any key view. It therefore refuses a store (or a `target`) wrapped in a `dol` key codec or filter (`WrappedStoreError`), since it would copy files the view hides and `--delete` against the wrong tree. Use the free function on the bare store, and state a sub-scope explicitly: `sshdol.ops.sync_to(src, "/local/dir", subdir="projects")`. For a wrapped local target, pass its directory as a path string.
 - Target must be a local filesystem path or an object with a `.rootdir` that is one (e.g., `dol.Files`).
 - You can control deletion timing and safety:
 
@@ -224,6 +225,9 @@ text = t["notes.txt"]  # Returns 'Hello, this is a text note'
 ```
 
 ### Creating a new directory
+
+(Under a `dol` key codec, use `sshdol.ops.mkdir(store, "projects")`: the method on a wrapped store would
+receive the unmapped key, so it refuses.)
 
 Now, know that your ssh stores have a `mkdir` where you can make a directory, 
 which can then be written in:

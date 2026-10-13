@@ -15,6 +15,7 @@ keywords = [
     "ssh",
     "sftp",
     "paramiko",
+    "dol>=0.3.59",  # inner_most_key (sshdol.ops)
     "dol",
     "storage",
     "key-value",
@@ -33,6 +34,7 @@ classifiers = [
 ]
 dependencies = [
     "paramiko",
+    "dol>=0.3.59",  # inner_most_key (sshdol.ops)
 ]
 
 [project.urls]

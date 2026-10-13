@@ -245,6 +245,78 @@ def split_path(path: str) -> tuple[str, str]:
     return "/".join(parts[:-1]), parts[-1]
 
 
+class WrappedStoreError(ValueError):
+    """A scope-wide or keyed operation was called through a ``dol`` wrapper (i2mint/sshdol#6)."""
+
+
+def _is_wrapped(obj) -> bool:
+    """True if ``obj`` is, or sits under, a ``dol`` wrapper (key/value/scope transform)."""
+    if isinstance(obj, (str, os.PathLike)):
+        return False
+    if hasattr(obj, "store"):  # a dol Store / delegating class wrap holds its inner as .store
+        return True
+    from dol import wrapped_self
+
+    return wrapped_self(obj) is not obj
+
+
+def _refuse_if_wrapped(store, what: str, instead: str) -> None:
+    if _is_wrapped(store):
+        raise WrappedStoreError(
+            f"{what}() reached the leaf store through a dol wrapper, which would hand it "
+            f"the caller's unmapped key / bypass the view's scope (i2mint/sshdol#6). "
+            f"Use {instead}."
+        )
+
+
+_BARE_FILES_MODULE = "dol.filesys"  # layers of a plain ``dol.Files``
+
+
+def _target_remaps_keys(target) -> bool:
+    """True if ``target`` maps keys to anything but ``<rootdir>/<key>``.
+
+    A bare ``dol.Files`` is itself a delegating class (it has a ``.store``) yet its view root
+    *is* its ``rootdir``; a key codec / subpath on top makes the two differ, which is exactly
+    when ``.rootdir`` (the leaf's) misleads. Probe with a key instead of guessing from types.
+    """
+    rootdir = getattr(target, "rootdir", None)
+    if not isinstance(rootdir, str):
+        return False
+    from dol import inner_most_key
+
+    layer = target  # any generic layer (filt_iter, wrap_kvs, ...) may hide files
+    while layer is not None:
+        # (a bare dol.Files holds its own pre-wrap class as ``.store``: match by module)
+        if not type(layer).__module__.startswith(_BARE_FILES_MODULE):
+            return True
+        layer = getattr(layer, "store", None)
+    probe = "sshdol-probe"
+    resolved = inner_most_key(target, probe, default=None)
+    if resolved is None:
+        return _is_wrapped(target)
+    return os.path.normpath(os.fspath(resolved)) != os.path.normpath(
+        os.path.join(rootdir, probe)
+    )
+
+
+def _resolve_sync_target(target) -> str:
+    """The local directory a ``sync_to`` target denotes (a path, or an object's ``.rootdir``)."""
+    if isinstance(target, Path):
+        return str(target)
+    if isinstance(target, str):
+        return target
+    if _target_remaps_keys(target):
+        raise WrappedStoreError(
+            "sync_to target is wrapped by a dol transform, whose .rootdir is the "
+            "leaf's directory, not the view's: rsync --delete would act on the whole "
+            "leaf directory (i2mint/sshdol#6). Pass the local directory path instead."
+        )
+    rootdir = getattr(target, "rootdir", None)
+    if isinstance(rootdir, str) and os.path.exists(rootdir):
+        return rootdir
+    return target
+
+
 class SshFilesReader(Mapping):
     """
     Read-only interface to files on a remote SSH server.
@@ -887,19 +959,11 @@ class SshFiles(SshFilesReader, MutableMapping):
                 raise
             raise KeyError(f"Error deleting {k}: {str(e)}")
 
-    def mkdir(self, path, exist_ok=False):
-        """
-        Create a directory on the SSH server.
+    def _mkdir_path(self, path, *, exist_ok=False):
+        """Create directory ``path`` (leaf coordinates, already mapped) under rootdir.
 
-        Args:
-            path: Directory path to create
-            exist_ok: If True, don't raise an error if directory already exists
-
-        Returns:
-            SshFiles: A new instance for the created directory
-
-        Raises:
-            KeyError: If directory cannot be created
+        Returns the normalized path. This is the primitive shared by the ``mkdir`` method
+        and :func:`sshdol.ops.mkdir`.
         """
         path = self._key_to_path(path)
 
@@ -921,17 +985,54 @@ class SshFiles(SshFilesReader, MutableMapping):
                 self._sftp.mkdir(path)
             except Exception as e:
                 raise KeyError(f"Failed to create directory {path}: {str(e)}")
+        return path
 
+    def mkdir(self, path, exist_ok=False):
+        """
+        Create a directory on the SSH server.
+
+        This method is for a bare (unwrapped) store. Under a ``dol`` key transform it would
+        receive the caller's *outer* key and create the directory in the wrong place
+        (i2mint/sshdol#6), so it refuses when it detects a wrapper: use
+        ``sshdol.ops.mkdir(store, path)`` there, which maps the key first.
+
+        Args:
+            path: Directory path to create
+            exist_ok: If True, don't raise an error if directory already exists
+
+        Returns:
+            SshFiles: A new instance for the created directory
+
+        Raises:
+            KeyError: If directory cannot be created
+            WrappedStoreError: If this store is wrapped by a dol transform
+        """
+        _refuse_if_wrapped(self, "mkdir", "sshdol.ops.mkdir(store, path)")
+        path = self._mkdir_path(path, exist_ok=exist_ok)
         # Return a new instance for the created directory
         return self[path]
 
     # -----------------------
     # High-performance syncs
     # -----------------------
-    def sync_to(
+    def sync_to(self, target: str, **kwargs) -> None:
+        """Synchronize remote rootdir to a local directory using rsync over SSH.
+
+        For a bare (unwrapped) store, with a string/``Path`` target or a bare ``.rootdir``
+        object. It refuses when this store, or ``target``, is wrapped by a ``dol`` transform:
+        rsync is scoped by ``rootdir``, not by any key view, so under a wrapper it would
+        copy files the view hides and ``--delete`` against the wrong tree (i2mint/sshdol#6).
+        Use ``sshdol.ops.sync_to(store, target, subdir=...)`` to state the scope explicitly.
+        See :meth:`_sync_to` for the keyword arguments.
+        """
+        _refuse_if_wrapped(self, "sync_to", "sshdol.ops.sync_to(store, target)")
+        return self._sync_to(_resolve_sync_target(target), **kwargs)
+
+    def _sync_to(
         self,
         target: str,
         *,
+        subdir: str | None = None,
         delete_local_files_not_in_remote: bool = False,
         delete_mode: None
         | (Literal["after", "before", "delay", "during", "recycle"]) = None,
@@ -945,7 +1046,10 @@ class SshFiles(SshFilesReader, MutableMapping):
         remote over SSH, minimizing round-trips and transferring only deltas.
 
         Args:
-            target: Local directory to sync into (created if missing).
+            target: Local directory (a path string, already resolved) to sync into
+                (created if missing).
+            subdir: Directory, relative to rootdir, to sync instead of all of rootdir.
+                Must stay inside rootdir.
             delete_local_files_not_in_remote: If True, remove local files that are not on remote (rsync --delete).
             delete_mode: Choose when/how deletion occurs. One of:
                 - 'before'  -> --delete-before
@@ -962,16 +1066,6 @@ class SshFiles(SshFilesReader, MutableMapping):
         Raises:
             RuntimeError: If rsync is unavailable or the sync fails.
         """
-        if isinstance(target, Path):
-            target = str(target)
-        elif (
-            not isinstance(target, str)  # target is not a string
-            and hasattr(target, "rootdir")  # and has a rootdir attribute
-            and isinstance(target.rootdir, str)  # which is a string
-            and os.path.exists(target.rootdir)  # and exists as a directory
-        ):  # then take that as the target
-            target = target.rootdir
-
         # Ensure local destination exists
         os.makedirs(target, exist_ok=True)
 
@@ -1027,7 +1121,10 @@ class SshFiles(SshFilesReader, MutableMapping):
 
         # Source and destination (operands at the end)
         # Ensure trailing slash to copy contents of rootdir into target directory
-        remote_src = f"{self._conn_user}@{self._conn_host}:{self.rootdir.rstrip('/')}/"
+        remote_root = self.rootdir.rstrip("/")
+        if subdir:
+            remote_root += "/" + self._key_to_path(subdir).rstrip("/")
+        remote_src = f"{self._conn_user}@{self._conn_host}:{remote_root}/"
         local_dst = os.path.join(target, "")
         rsync_cmd += [remote_src, local_dst]
 
