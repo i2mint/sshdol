@@ -207,3 +207,37 @@ def test_sync_to_subdir_metacharacters_protected_on_new_rsync(
 def test_sync_to_plain_subdir_does_not_use_protect_args(leaf, rsync, tmp_path):
     sync_to(leaf, tmp_path / "d", subdir="sub/x")
     assert "-s" not in rsync[0]
+
+
+# ---- mkdir honours filt_iter scopes (i2mint/sshdol#12) ---------------------------------
+
+
+def test_mkdir_refuses_a_key_outside_a_filt_iter_scope(leaf):
+    view = filt_iter(leaf, filt=lambda k: k.startswith("sub/"))
+    with pytest.raises(KeyError, match="not in store"):
+        mkdir(view, "other/new")
+    assert leaf._sftp.made == []
+    mkdir(view, "sub/new")
+    assert leaf._sftp.made == ["sub", "sub/new"]
+
+
+def test_mkdir_scope_is_checked_in_each_layers_own_coordinates(leaf):
+    # the filter sits below the prefix codec, so it sees 'sub/<key>'
+    view = KeyCodecs.prefixed("sub/")(filt_iter(leaf, filt=lambda k: k.startswith("sub/a")))
+    with pytest.raises(KeyError, match="not in store"):
+        mkdir(view, "b")
+    assert leaf._sftp.made == []
+    mkdir(view, "a1")
+    assert leaf._sftp.made == ["sub", "sub/a1"]
+
+
+@pytest.mark.parametrize("key", ["sub/../other", "../other", "sub/a/../../other", "sub\\..\\other"])
+def test_mkdir_on_a_wrapped_store_refuses_dotdot_segments(leaf, key):
+    """A filter judges the spelling; '..' would resolve to a place the spelling hides."""
+    for view in (
+        filt_iter(leaf, filt=lambda k: k.startswith("sub")),
+        subdir_view(leaf),
+    ):
+        with pytest.raises(KeyError):
+            mkdir(view, key)
+    assert leaf._sftp.made == []
