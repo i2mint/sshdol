@@ -104,6 +104,23 @@ def escapes_root(path: str) -> bool:
     return normalized == ".." or normalized.startswith("../")
 
 
+MAX_SYMLINK_HOPS = 40  # same order as the kernel's ELOOP limit
+
+
+def is_within(real_path: str, real_root: str) -> bool:
+    """Whether an absolute, symlink-free ``real_path`` is ``real_root`` or below it.
+
+    >>> is_within('/srv/data/a/b', '/srv/data'), is_within('/srv/data', '/srv/data')
+    (True, True)
+    >>> is_within('/srv/data2/a', '/srv/data'), is_within('/etc', '/srv/data')
+    (False, False)
+    >>> is_within('/anything', '/')
+    True
+    """
+    root = real_root.rstrip("/")
+    return real_path == real_root or real_path.startswith(root + "/")
+
+
 class RejectUnknownHostKey(paramiko.RejectPolicy):
     """Refuse hosts whose key is not in known_hosts, with a message saying what to do."""
 
@@ -354,9 +371,10 @@ class SshFilesReader(Mapping):
                             If False (default), it will return False for such paths
                             Design notes: https://github.com/i2mint/sshdol/issues/1#issuecomment-2714508482
             allow_escape: If False (default), keys are confined to ``rootdir``:
-                       absolute keys and keys whose ``..`` segments leave it raise
-                       ``KeyError`` (and ``in`` returns False). Symbolic links on
-                       the server are not resolved by this check.
+                       absolute keys, keys whose ``..`` segments leave it and keys
+                       that resolve outside it through a symbolic link on the server
+                       raise ``KeyError`` (and ``in`` returns False). ``sync_to``
+                       skips links pointing outside the synced tree.
             missing_host_key_policy: What to do when the server's host key is not
                        in ``known_hosts`` (system, user, or the config's
                        ``UserKnownHostsFile``). Default: follow the host's ssh
@@ -484,6 +502,64 @@ class SshFilesReader(Mapping):
         if not getattr(self, "_allow_escape", False) and escapes_root(path):
             raise KeyError(
                 f"Key points outside rootdir (pass allow_escape=True to allow): {k}"
+            )
+        return path
+
+    def _real_root(self):
+        """Absolute, symlink-free path of ``rootdir`` on the server (cached)."""
+        root = getattr(self, "_real_root_cache", None)
+        if root is None:
+            root = self._real_root_cache = self._sftp.normalize(".")
+        return root
+
+    def _real_path(self, path, *, _hops=0):
+        """Absolute path on the server that ``path`` (relative to rootdir) addresses, with
+        every symbolic link resolved, including a dangling one and ones among components
+        that do not exist yet. Raises ``KeyError`` for a link loop, or for a ``..`` after a
+        component that does not exist.
+        """
+        if _hops > MAX_SYMLINK_HOPS:
+            raise KeyError(f"Too many levels of symbolic links: {path}")
+        try:
+            return self._sftp.normalize(path)
+        except OSError:
+            pass  # not (fully) existing: resolve the parent, then look at the last name
+        parent, _, name = path.rstrip("/").rpartition("/")
+        if name in ("", ".", ".."):
+            raise KeyError(f"Cannot resolve path through a missing directory: {path}")
+        real_parent = self._real_path(
+            parent or ("/" if path.startswith("/") else "."), _hops=_hops
+        )
+        candidate = posixpath.join(real_parent, name)
+        try:
+            is_link = stat.S_ISLNK(self._sftp.lstat(candidate).st_mode)
+        except OSError:
+            return candidate  # really absent
+        if is_link:  # dangling (else normalize would have succeeded): follow its target
+            target = posixpath.join(real_parent, self._sftp.readlink(candidate))
+            return self._real_path(target, _hops=_hops + 1)
+        return candidate
+
+    def _confined_path(self, k, *, follow_final=True):
+        """Like ``_key_to_path``, and also refuse (``KeyError``) a key that, through a
+        symbolic link on the server, resolves outside rootdir (i2mint/sshdol#11).
+
+        With ``follow_final=False`` a link in the *last* position is not followed: for
+        operations such as delete that act on the link itself. The check and the operation
+        are separate round trips, so a link swapped in between is not caught.
+        """
+        path = self._key_to_path(k)
+        if getattr(self, "_allow_escape", False) or not path:
+            return path
+        head, _, name = path.rpartition("/")
+        if follow_final or name in ("", ".", ".."):
+            real = self._real_path(path)
+        else:
+            real = posixpath.join(self._real_path(head or "."), name)
+        if not is_within(real, self._real_root()):
+            raise KeyError(
+                f"Key resolves outside rootdir through a symbolic link "
+                f"(pass allow_escape=True to allow): {k}"
             )
         return path
 
@@ -617,7 +693,7 @@ class SshFilesReader(Mapping):
         Supports path-based keys with slashes for nested files.
         Respects max_levels constraint for reading.
         """
-        path = self._key_to_path(k)
+        path = self._confined_path(k)
 
         # Check if path exceeds allowed depth
         self._check_path_depth(path)
@@ -775,7 +851,7 @@ class SshFilesReader(Mapping):
         See https://github.com/i2mint/sshdol/issues/1#issuecomment-2714508482
         """
         try:
-            path = self._key_to_path(k)
+            path = self._confined_path(k)
         except KeyError:
             return False
 
@@ -872,7 +948,7 @@ class SshFiles(SshFilesReader, MutableMapping):
         Respects max_levels constraint for writing.
         """
         # Check if path exceeds allowed depth
-        path = self._key_to_path(k)
+        path = self._confined_path(k)
         self._check_path_depth(path)
 
         # Handle encoding based on the _encoding attribute
@@ -906,14 +982,18 @@ class SshFiles(SshFilesReader, MutableMapping):
         """
         Delete a file on the SSH server.
         """
-        path = self._key_to_path(k)
+        path = self._confined_path(k, follow_final=False)
 
-        if not self._path_exists(path):
+        try:
+            is_link = stat.S_ISLNK(self._sftp.lstat(path).st_mode)
+        except OSError:
             raise KeyError(k)
 
         try:
+            if is_link:
+                self._sftp.remove(path)  # the link itself, never its target
             # Check if it's a directory
-            if self._is_dir(path):
+            elif self._is_dir(path):
                 # Check if it's empty
                 entries = self._list_directory(path)
                 if entries:
@@ -932,7 +1012,7 @@ class SshFiles(SshFilesReader, MutableMapping):
         Returns the normalized path. This is the primitive shared by the ``mkdir`` method
         and :func:`sshdol.ops.mkdir`.
         """
-        path = self._key_to_path(path)
+        path = self._confined_path(path)
 
         # Check if directory already exists
         if self._path_exists(path):
@@ -1067,6 +1147,9 @@ class SshFiles(SshFilesReader, MutableMapping):
                     )
                 rsync_cmd.append(delete_flag_map[delete_mode])
 
+        if not self._allow_escape:  # links in the tree must not point out of it
+            rsync_cmd.append("--safe-links")
+
         # Allow caller-supplied extra args before operands
         if extra_args:
             rsync_cmd.extend(extra_args)
@@ -1080,7 +1163,7 @@ class SshFiles(SshFilesReader, MutableMapping):
                     f"subdir has characters outside [\\w./@%+=:,-]: {subdir!r} "
                     "(rsync may split them in the remote shell)"
                 )
-            remote_root += "/" + self._key_to_path(subdir).rstrip("/")
+            remote_root += "/" + self._confined_path(subdir).rstrip("/")
         remote_src = f"{self._conn_user}@{self._conn_host}:{remote_root}/"
         local_dst = os.path.join(target, "")
         rsync_cmd += [remote_src, local_dst]

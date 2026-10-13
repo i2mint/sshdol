@@ -1,5 +1,6 @@
 """Key-transform blindness (i2mint/sshdol#6): wrapped stores, no SSH server needed."""
 
+import posixpath
 import subprocess
 from unittest import mock
 
@@ -21,6 +22,9 @@ class Recorder:
 
     def stat(self, path):
         raise OSError(path)
+
+    def normalize(self, path):  # no symlinks in the mock: the lexical answer
+        return posixpath.normpath(posixpath.join("/remote/root", path))
 
 
 @pytest.fixture
