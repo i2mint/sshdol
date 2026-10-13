@@ -308,8 +308,14 @@ _SAFE_SUBDIR = re.compile(
     r"^[\w./@%+=:,-]+$"
 )  # no spaces/shell metacharacters (old rsyncs split the remote path in a shell)
 _UNPRINTABLE = re.compile(r"[\x00-\x1f\x7f]")
-_RSYNC_GLOB = re.compile(r"[*?\[\]]")  # the remote rsync expands these itself, even with -s
-PROTECT_ARGS_MIN_RSYNC = (3, 2, 4)  # from here on the remote path is not shell-split with -s
+_RSYNC_GLOB = re.compile(
+    r"[*?\[\]]"
+)  # the remote rsync expands these itself, even with -s
+PROTECT_ARGS_MIN_RSYNC = (
+    3,
+    2,
+    4,
+)  # from here on the remote path is not shell-split with -s
 
 
 _rsync_version_cache: tuple[int, ...] | None = None
@@ -1242,7 +1248,9 @@ class SshFiles(SshFilesReader, MutableMapping):
                         f"subdir has characters outside [\\w./@%+=:,-]: {subdir!r}, which "
                         "rsync older than 3.2.4 may split in the remote shell"
                     )
-                rsync_cmd.append("-s")  # --protect-args: no remote-shell splitting (not for globs: above)
+                rsync_cmd.append(
+                    "-s"
+                )  # --protect-args: no remote-shell splitting (not for globs: above)
             remote_root += "/" + self._confined_path(subdir).rstrip("/")
         remote_src = f"{self._conn_user}@{self._conn_host}:{remote_root}/"
         local_dst = os.path.join(target, "")
