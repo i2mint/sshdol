@@ -20,6 +20,7 @@ Design notes:
 | [`escapes_root`](#sshdol.base.escapes_root)(path)              | Whether a (normalized, `/`-separated) key path points outside the root.   |
 |----------------------------------------------------------------------------------|---------------------------------------------------------------------------|
 | [`get_ssh_config_for_host`](#sshdol.base.get_ssh_config_for_host)(host)   | Get SSH configuration for a specific host from the SSH config file.       |
+| [`is_within`](#sshdol.base.is_within)(real_path, real_root) | Whether an absolute, symlink-free `real_path` is `real_root` or below it. |
 | [`known_hosts_files`](#sshdol.base.known_hosts_files)([ssh_config]) | The known_hosts files that apply, as OpenSSH chooses them.                |
 | [`normalize_path`](#sshdol.base.normalize_path)(path)            | Normalize a path to use forward slashes and handle trailing slashes.      |
 | [`read_known_hosts`](#sshdol.base.read_known_hosts)(files)         | Parse known_hosts `files` leniently into a `paramiko.HostKeys`.           |
@@ -159,6 +160,22 @@ Get SSH configuration for a specific host from the SSH config file.
   Dictionary with SSH configuration parameters
 * **Return type:**
   [*dict*](https://docs.python.org/3/builtins/stdtypes.html#dict)
+
+### sshdol.base.is_within(real_path, real_root)
+
+Whether an absolute, symlink-free `real_path` is `real_root` or below it.
+
+* **Return type:**
+  [`bool`](https://docs.python.org/3/builtins/functions.html#bool)
+
+```pycon
+>>> is_within('/srv/data/a/b', '/srv/data'), is_within('/srv/data', '/srv/data')
+(True, True)
+>>> is_within('/srv/data2/a', '/srv/data'), is_within('/etc', '/srv/data')
+(False, False)
+>>> is_within('/anything', '/')
+True
+```
 
 ### sshdol.base.known_hosts_files(ssh_config=None)
 

@@ -10,6 +10,7 @@ sshdol.base
    
       escapes_root
       get_ssh_config_for_host
+      is_within
       known_hosts_files
       normalize_path
       read_known_hosts

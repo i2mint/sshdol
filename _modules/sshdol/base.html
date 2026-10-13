@@ -356,6 +356,27 @@
 
 
 
+<span class="n">_LINK_FOLLOWING_RSYNC_ARGS</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"-L"</span><span class="p">,</span> <span class="s2">"--copy-links"</span><span class="p">,</span> <span class="s2">"--copy-unsafe-links"</span><span class="p">,</span> <span class="s2">"-k"</span><span class="p">,</span> <span class="s2">"--copy-dirlinks"</span><span class="p">)</span>
+<span class="n">MAX_SYMLINK_HOPS</span> <span class="o">=</span> <span class="mi">40</span>  <span class="c1"># same order as the kernel's ELOOP limit</span>
+
+
+<div class="viewcode-block" id="is_within">
+<a class="viewcode-back" href="../../_autosummary/sshdol.base.html#sshdol.base.is_within">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">is_within</span><span class="p">(</span><span class="n">real_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">real_root</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Whether an absolute, symlink-free ``real_path`` is ``real_root`` or below it.</span>
+
+<span class="sd">    &gt;&gt;&gt; is_within('/srv/data/a/b', '/srv/data'), is_within('/srv/data', '/srv/data')</span>
+<span class="sd">    (True, True)</span>
+<span class="sd">    &gt;&gt;&gt; is_within('/srv/data2/a', '/srv/data'), is_within('/etc', '/srv/data')</span>
+<span class="sd">    (False, False)</span>
+<span class="sd">    &gt;&gt;&gt; is_within('/anything', '/')</span>
+<span class="sd">    True</span>
+<span class="sd">    """</span>
+    <span class="n">root</span> <span class="o">=</span> <span class="n">real_root</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s2">"/"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">real_path</span> <span class="o">==</span> <span class="n">real_root</span> <span class="ow">or</span> <span class="n">real_path</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">root</span> <span class="o">+</span> <span class="s2">"/"</span><span class="p">)</span></div>
+
+
+
 <div class="viewcode-block" id="RejectUnknownHostKey">
 <a class="viewcode-back" href="../../_autosummary/sshdol.base.html#sshdol.base.RejectUnknownHostKey">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">RejectUnknownHostKey</span><span class="p">(</span><span class="n">paramiko</span><span class="o">.</span><span class="n">RejectPolicy</span><span class="p">):</span>
@@ -552,7 +573,9 @@
     <span class="p">)</span>
 
 
-<span class="n">_SAFE_SUBDIR</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">"^[\w./@%+=:,-]+$"</span><span class="p">)</span>  <span class="c1"># no spaces/shell metacharacters (old rsyncs)</span>
+<span class="n">_SAFE_SUBDIR</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span>
+    <span class="sa">r</span><span class="s2">"^[\w./@%+=:,-]+$"</span>
+<span class="p">)</span>  <span class="c1"># no spaces/shell metacharacters (old rsyncs)</span>
 
 
 <div class="viewcode-block" id="SshFilesReader">
@@ -627,9 +650,10 @@
 <span class="sd">                            If False (default), it will return False for such paths</span>
 <span class="sd">                            Design notes: https://github.com/i2mint/sshdol/issues/1#issuecomment-2714508482</span>
 <span class="sd">            allow_escape: If False (default), keys are confined to ``rootdir``:</span>
-<span class="sd">                       absolute keys and keys whose ``..`` segments leave it raise</span>
-<span class="sd">                       ``KeyError`` (and ``in`` returns False). Symbolic links on</span>
-<span class="sd">                       the server are not resolved by this check.</span>
+<span class="sd">                       absolute keys, keys whose ``..`` segments leave it and keys</span>
+<span class="sd">                       that resolve outside it through a symbolic link on the server</span>
+<span class="sd">                       raise ``KeyError`` (and ``in`` returns False). ``sync_to``</span>
+<span class="sd">                       skips links pointing outside the synced tree.</span>
 <span class="sd">            missing_host_key_policy: What to do when the server's host key is not</span>
 <span class="sd">                       in ``known_hosts`` (system, user, or the config's</span>
 <span class="sd">                       ``UserKnownHostsFile``). Default: follow the host's ssh</span>
@@ -760,6 +784,64 @@
             <span class="p">)</span>
         <span class="k">return</span> <span class="n">path</span>
 
+    <span class="k">def</span><span class="w"> </span><span class="nf">_real_root</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Absolute, symlink-free path of ``rootdir`` on the server (cached)."""</span>
+        <span class="n">root</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">"_real_root_cache"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">root</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">root</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_real_root_cache</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sftp</span><span class="o">.</span><span class="n">normalize</span><span class="p">(</span><span class="s2">"."</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">root</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_real_path</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">_hops</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Absolute path on the server that ``path`` (relative to rootdir) addresses, with</span>
+<span class="sd">        every symbolic link resolved, including a dangling one and ones among components</span>
+<span class="sd">        that do not exist yet. Raises ``KeyError`` for a link loop, or for a ``..`` after a</span>
+<span class="sd">        component that does not exist.</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="n">_hops</span> <span class="o">&gt;</span> <span class="n">MAX_SYMLINK_HOPS</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Too many levels of symbolic links: </span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sftp</span><span class="o">.</span><span class="n">normalize</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">OSError</span><span class="p">:</span>
+            <span class="k">pass</span>  <span class="c1"># not (fully) existing: resolve the parent, then look at the last name</span>
+        <span class="n">parent</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">name</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s2">"/"</span><span class="p">)</span><span class="o">.</span><span class="n">rpartition</span><span class="p">(</span><span class="s2">"/"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">""</span><span class="p">,</span> <span class="s2">"."</span><span class="p">,</span> <span class="s2">".."</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Cannot resolve path through a missing directory: </span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="n">real_parent</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_real_path</span><span class="p">(</span>
+            <span class="n">parent</span> <span class="ow">or</span> <span class="p">(</span><span class="s2">"/"</span> <span class="k">if</span> <span class="n">path</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"/"</span><span class="p">)</span> <span class="k">else</span> <span class="s2">"."</span><span class="p">),</span> <span class="n">_hops</span><span class="o">=</span><span class="n">_hops</span>
+        <span class="p">)</span>
+        <span class="n">candidate</span> <span class="o">=</span> <span class="n">posixpath</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">real_parent</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">is_link</span> <span class="o">=</span> <span class="n">stat</span><span class="o">.</span><span class="n">S_ISLNK</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_sftp</span><span class="o">.</span><span class="n">lstat</span><span class="p">(</span><span class="n">candidate</span><span class="p">)</span><span class="o">.</span><span class="n">st_mode</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">OSError</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">candidate</span>  <span class="c1"># really absent</span>
+        <span class="k">if</span> <span class="n">is_link</span><span class="p">:</span>  <span class="c1"># dangling (else normalize would have succeeded): follow its target</span>
+            <span class="n">target</span> <span class="o">=</span> <span class="n">posixpath</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">real_parent</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sftp</span><span class="o">.</span><span class="n">readlink</span><span class="p">(</span><span class="n">candidate</span><span class="p">))</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_real_path</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="n">_hops</span><span class="o">=</span><span class="n">_hops</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">candidate</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_confined_path</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">follow_final</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Like ``_key_to_path``, and also refuse (``KeyError``) a key that, through a</span>
+<span class="sd">        symbolic link on the server, resolves outside rootdir (i2mint/sshdol#11).</span>
+
+<span class="sd">        With ``follow_final=False`` a link in the *last* position is not followed: for</span>
+<span class="sd">        operations such as delete that act on the link itself. The check and the operation</span>
+<span class="sd">        are separate round trips, so a link swapped in between is not caught.</span>
+<span class="sd">        """</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_key_to_path</span><span class="p">(</span><span class="n">k</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">"_allow_escape"</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">path</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">path</span>
+        <span class="n">head</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">name</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">rpartition</span><span class="p">(</span><span class="s2">"/"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">follow_final</span> <span class="ow">or</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">""</span><span class="p">,</span> <span class="s2">"."</span><span class="p">,</span> <span class="s2">".."</span><span class="p">):</span>
+            <span class="n">real</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_real_path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">real</span> <span class="o">=</span> <span class="n">posixpath</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_real_path</span><span class="p">(</span><span class="n">head</span> <span class="ow">or</span> <span class="s2">"."</span><span class="p">),</span> <span class="n">name</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">is_within</span><span class="p">(</span><span class="n">real</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_real_root</span><span class="p">()):</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"Key resolves outside rootdir through a symbolic link "</span>
+                <span class="sa">f</span><span class="s2">"(pass allow_escape=True to allow): </span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s2">"</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">path</span>
+
     <span class="k">def</span><span class="w"> </span><span class="nf">_is_dir</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Check if a path is a directory"""</span>
         <span class="k">try</span><span class="p">:</span>
@@ -775,7 +857,7 @@
             <span class="n">quoted_root</span> <span class="o">=</span> <span class="n">shlex</span><span class="o">.</span><span class="n">quote</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rootdir</span><span class="p">)</span>
             <span class="n">quoted_path</span> <span class="o">=</span> <span class="n">shlex</span><span class="o">.</span><span class="n">quote</span><span class="p">(</span><span class="n">normalize_path</span><span class="p">(</span><span class="n">path</span><span class="p">))</span>
             <span class="n">cmd</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="sa">f</span><span class="s2">"cd </span><span class="si">{</span><span class="n">quoted_root</span><span class="si">}</span><span class="s2"> 2&gt;/dev/null || true; "</span>
+                <span class="sa">f</span><span class="s2">"cd -P -- </span><span class="si">{</span><span class="n">quoted_root</span><span class="si">}</span><span class="s2"> 2&gt;/dev/null || exit 1; "</span>
                 <span class="sa">f</span><span class="s2">"if [ -e </span><span class="si">{</span><span class="n">quoted_path</span><span class="si">}</span><span class="s2"> ]; then echo 0; else echo 1; fi"</span>
             <span class="p">)</span>
             <span class="n">stdin</span><span class="p">,</span> <span class="n">stdout</span><span class="p">,</span> <span class="n">stderr</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ssh</span><span class="o">.</span><span class="n">exec_command</span><span class="p">(</span><span class="n">cmd</span><span class="p">)</span>
@@ -831,7 +913,7 @@
             <span class="n">find_cmd</span> <span class="o">=</span> <span class="p">(</span>
                 <span class="sa">f</span><span class="s2">"find . -mindepth 1 </span><span class="si">{</span><span class="n">maxdepth_clause</span><span class="si">}{</span><span class="n">prune_hidden</span><span class="si">}</span><span class="s2">-printf '%y</span><span class="se">\t</span><span class="s2">%P</span><span class="se">\n</span><span class="s2">'"</span>
             <span class="p">)</span>
-            <span class="n">cmd</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"set -e; cd </span><span class="si">{</span><span class="n">quoted_root</span><span class="si">}</span><span class="s2"> 2&gt;/dev/null || true; </span><span class="si">{</span><span class="n">find_cmd</span><span class="si">}</span><span class="s2">"</span>
+            <span class="n">cmd</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"set -e; cd -P -- </span><span class="si">{</span><span class="n">quoted_root</span><span class="si">}</span><span class="s2"> 2&gt;/dev/null || exit 1; </span><span class="si">{</span><span class="n">find_cmd</span><span class="si">}</span><span class="s2">"</span>
             <span class="n">stdin</span><span class="p">,</span> <span class="n">stdout</span><span class="p">,</span> <span class="n">stderr</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ssh</span><span class="o">.</span><span class="n">exec_command</span><span class="p">(</span><span class="n">cmd</span><span class="p">)</span>
             <span class="n">data</span> <span class="o">=</span> <span class="n">stdout</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
             <span class="n">text</span> <span class="o">=</span> <span class="p">(</span>
@@ -884,13 +966,34 @@
             <span class="p">)</span>
         <span class="k">return</span> <span class="kc">True</span>
 
+    <span class="k">def</span><span class="w"> </span><span class="nf">_subdir_store</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""A new instance (own connection) rooted at directory ``path`` of this one.</span>
+
+<span class="sd">        Its rootdir is the *resolved* path, not ``rootdir/path`` as text: the remote shell</span>
+<span class="sd">        (listing, ``in``) and SFTP must agree on where ``..`` after a symbolic link leads</span>
+<span class="sd">        (i2mint/sshdol#11).</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_allow_escape</span><span class="p">:</span>
+            <span class="n">new_rootdir</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">path</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">rootdir</span> <span class="o">==</span> <span class="s2">"."</span>
+                <span class="k">else</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">rootdir</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s1">'/'</span><span class="p">)</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">"</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">new_rootdir</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_real_path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)(</span>
+            <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_init_params</span><span class="p">,</span>
+            <span class="n">rootdir</span><span class="o">=</span><span class="n">new_rootdir</span><span class="p">,</span>
+            <span class="n">_pinned_host_key</span><span class="o">=</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">"_pinned_host_key"</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
+        <span class="p">)</span>
+
     <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">k</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""</span>
 <span class="sd">        Get contents of a file or return a new instance for directories.</span>
 <span class="sd">        Supports path-based keys with slashes for nested files.</span>
 <span class="sd">        Respects max_levels constraint for reading.</span>
 <span class="sd">        """</span>
-        <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_key_to_path</span><span class="p">(</span><span class="n">k</span><span class="p">)</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_confined_path</span><span class="p">(</span><span class="n">k</span><span class="p">)</span>
 
         <span class="c1"># Check if path exceeds allowed depth</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_check_path_depth</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
@@ -912,26 +1015,7 @@
 
             <span class="c1"># Check if the whole path is a directory</span>
             <span class="k">if</span> <span class="n">is_dir</span><span class="p">:</span>
-                <span class="c1"># Create a new instance for this subdirectory</span>
-                <span class="n">params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_init_params</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
-
-                <span class="c1"># Create new path by joining current rootdir with the key</span>
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">rootdir</span> <span class="o">==</span> <span class="s2">"."</span><span class="p">:</span>
-                    <span class="n">new_rootdir</span> <span class="o">=</span> <span class="n">path</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="n">new_rootdir</span> <span class="o">=</span> <span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">rootdir</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">"</span>
-                        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">rootdir</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">"/"</span><span class="p">)</span>
-                        <span class="k">else</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">rootdir</span><span class="si">}{</span><span class="n">path</span><span class="si">}</span><span class="s2">"</span>
-                    <span class="p">)</span>
-
-                <span class="c1"># Create a completely new connection for the subdirectory</span>
-                <span class="n">new_instance</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)(</span>
-                    <span class="o">**</span><span class="n">params</span><span class="p">,</span>
-                    <span class="n">rootdir</span><span class="o">=</span><span class="n">new_rootdir</span><span class="p">,</span>
-                    <span class="n">_pinned_host_key</span><span class="o">=</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">"_pinned_host_key"</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
-                <span class="p">)</span>
-                <span class="k">return</span> <span class="n">new_instance</span>
+                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_subdir_store</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
 
             <span class="c1"># Try to open as a file</span>
             <span class="k">try</span><span class="p">:</span>
@@ -946,26 +1030,7 @@
 
         <span class="c1"># Handle direct directory or file access (no slashes)</span>
         <span class="k">if</span> <span class="n">is_dir</span><span class="p">:</span>
-            <span class="c1"># Create a new instance for this subdirectory</span>
-            <span class="n">params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_init_params</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
-
-            <span class="c1"># Create new path by joining current rootdir with the key</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">rootdir</span> <span class="o">==</span> <span class="s2">"."</span><span class="p">:</span>
-                <span class="n">new_rootdir</span> <span class="o">=</span> <span class="n">path</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">new_rootdir</span> <span class="o">=</span> <span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">rootdir</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">"</span>
-                    <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">rootdir</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">"/"</span><span class="p">)</span>
-                    <span class="k">else</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">rootdir</span><span class="si">}{</span><span class="n">path</span><span class="si">}</span><span class="s2">"</span>
-                <span class="p">)</span>
-
-            <span class="c1"># Create a completely new connection for the subdirectory</span>
-            <span class="n">new_instance</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)(</span>
-                <span class="o">**</span><span class="n">params</span><span class="p">,</span>
-                <span class="n">rootdir</span><span class="o">=</span><span class="n">new_rootdir</span><span class="p">,</span>
-                <span class="n">_pinned_host_key</span><span class="o">=</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">"_pinned_host_key"</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
-            <span class="p">)</span>
-            <span class="k">return</span> <span class="n">new_instance</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_subdir_store</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
 
         <span class="c1"># If it's a file, return its contents</span>
         <span class="k">try</span><span class="p">:</span>
@@ -1031,7 +1096,7 @@
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">type_clause</span> <span class="o">=</span> <span class="s2">"-type f"</span>
             <span class="n">find_cmd</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"find . -mindepth 1 </span><span class="si">{</span><span class="n">maxdepth_clause</span><span class="si">}{</span><span class="n">prune_hidden</span><span class="si">}{</span><span class="n">type_clause</span><span class="si">}</span><span class="s2"> -print | wc -l"</span>
-            <span class="n">cmd</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"set -e; cd </span><span class="si">{</span><span class="n">quoted_root</span><span class="si">}</span><span class="s2"> 2&gt;/dev/null || true; </span><span class="si">{</span><span class="n">find_cmd</span><span class="si">}</span><span class="s2">"</span>
+            <span class="n">cmd</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"set -e; cd -P -- </span><span class="si">{</span><span class="n">quoted_root</span><span class="si">}</span><span class="s2"> 2&gt;/dev/null || exit 1; </span><span class="si">{</span><span class="n">find_cmd</span><span class="si">}</span><span class="s2">"</span>
             <span class="n">stdin</span><span class="p">,</span> <span class="n">stdout</span><span class="p">,</span> <span class="n">stderr</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ssh</span><span class="o">.</span><span class="n">exec_command</span><span class="p">(</span><span class="n">cmd</span><span class="p">)</span>
             <span class="n">out</span> <span class="o">=</span> <span class="n">stdout</span><span class="o">.</span><span class="n">read</span><span class="p">()</span><span class="o">.</span><span class="n">decode</span><span class="p">()</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
             <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">out</span><span class="p">)</span> <span class="k">if</span> <span class="n">out</span><span class="o">.</span><span class="n">isdigit</span><span class="p">()</span> <span class="k">else</span> <span class="mi">0</span>
@@ -1048,7 +1113,7 @@
 <span class="sd">        See https://github.com/i2mint/sshdol/issues/1#issuecomment-2714508482</span>
 <span class="sd">        """</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_key_to_path</span><span class="p">(</span><span class="n">k</span><span class="p">)</span>
+            <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_confined_path</span><span class="p">(</span><span class="n">k</span><span class="p">)</span>
         <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
             <span class="k">return</span> <span class="kc">False</span>
 
@@ -1148,7 +1213,7 @@
 <span class="sd">        Respects max_levels constraint for writing.</span>
 <span class="sd">        """</span>
         <span class="c1"># Check if path exceeds allowed depth</span>
-        <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_key_to_path</span><span class="p">(</span><span class="n">k</span><span class="p">)</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_confined_path</span><span class="p">(</span><span class="n">k</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_check_path_depth</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
 
         <span class="c1"># Handle encoding based on the _encoding attribute</span>
@@ -1182,14 +1247,18 @@
 <span class="w">        </span><span class="sd">"""</span>
 <span class="sd">        Delete a file on the SSH server.</span>
 <span class="sd">        """</span>
-        <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_key_to_path</span><span class="p">(</span><span class="n">k</span><span class="p">)</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_confined_path</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">follow_final</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 
-        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_path_exists</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">is_link</span> <span class="o">=</span> <span class="n">stat</span><span class="o">.</span><span class="n">S_ISLNK</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_sftp</span><span class="o">.</span><span class="n">lstat</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">st_mode</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">OSError</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="n">k</span><span class="p">)</span>
 
         <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">is_link</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_sftp</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>  <span class="c1"># the link itself, never its target</span>
             <span class="c1"># Check if it's a directory</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_dir</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_dir</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
                 <span class="c1"># Check if it's empty</span>
                 <span class="n">entries</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_list_directory</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
                 <span class="k">if</span> <span class="n">entries</span><span class="p">:</span>
@@ -1208,7 +1277,7 @@
 <span class="sd">        Returns the normalized path. This is the primitive shared by the ``mkdir`` method</span>
 <span class="sd">        and :func:`sshdol.ops.mkdir`.</span>
 <span class="sd">        """</span>
-        <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_key_to_path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_confined_path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
 
         <span class="c1"># Check if directory already exists</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_path_exists</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
@@ -1238,7 +1307,9 @@
 <span class="sd">        A method runs bound to the leaf, so under a ``dol`` key transform it received the</span>
 <span class="sd">        caller's unmapped key and created the directory in the wrong place (i2mint/sshdol#6).</span>
 <span class="sd">        """</span>
-        <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span><span class="n">_MOVED</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">old</span><span class="o">=</span><span class="s2">"mkdir"</span><span class="p">,</span> <span class="n">new</span><span class="o">=</span><span class="s2">"sshdol.ops.mkdir(store, path)"</span><span class="p">))</span></div>
+        <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span>
+            <span class="n">_MOVED</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">old</span><span class="o">=</span><span class="s2">"mkdir"</span><span class="p">,</span> <span class="n">new</span><span class="o">=</span><span class="s2">"sshdol.ops.mkdir(store, path)"</span><span class="p">)</span>
+        <span class="p">)</span></div>
 
 
     <span class="c1"># -----------------------</span>
@@ -1254,7 +1325,9 @@
 <span class="sd">        tree (i2mint/sshdol#6).</span>
 <span class="sd">        """</span>
         <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span>
-            <span class="n">_MOVED</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">old</span><span class="o">=</span><span class="s2">"sync_to"</span><span class="p">,</span> <span class="n">new</span><span class="o">=</span><span class="s2">"sshdol.ops.sync_to(store, target, subdir=...)"</span><span class="p">)</span>
+            <span class="n">_MOVED</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                <span class="n">old</span><span class="o">=</span><span class="s2">"sync_to"</span><span class="p">,</span> <span class="n">new</span><span class="o">=</span><span class="s2">"sshdol.ops.sync_to(store, target, subdir=...)"</span>
+            <span class="p">)</span>
         <span class="p">)</span></div>
 
 
@@ -1291,7 +1364,11 @@
 <span class="sd">            recycle_bin: When delete_mode='recycle', directory to store deleted items.</span>
 <span class="sd">                Defaults to the OS recycle location (macOS: ~/.Trash, Linux: ~/.local/share/Trash/files).</span>
 <span class="sd">            compress: If True, use -z compression.</span>
-<span class="sd">            extra_args: Additional rsync args (list of strings) to append.</span>
+<span class="sd">            extra_args: Additional rsync args (list of strings) to append. Unless the</span>
+<span class="sd">                store has ``allow_escape=True``, link-following ones (``-L``, ``-k``,</span>
+<span class="sd">                ``--copy-links``, ``--copy-unsafe-links``, ``--copy-dirlinks``) are refused</span>
+<span class="sd">                and ``--safe-links`` is passed, which skips absolute symbolic links and</span>
+<span class="sd">                relative ones that leave the synced tree (judged by their text).</span>
 
 <span class="sd">        Raises:</span>
 <span class="sd">            RuntimeError: If rsync is unavailable or the sync fails.</span>
@@ -1345,6 +1422,15 @@
                     <span class="p">)</span>
                 <span class="n">rsync_cmd</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">delete_flag_map</span><span class="p">[</span><span class="n">delete_mode</span><span class="p">])</span>
 
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_allow_escape</span><span class="p">:</span>  <span class="c1"># links in the tree must not point out of it</span>
+            <span class="n">followed</span> <span class="o">=</span> <span class="p">[</span><span class="n">a</span> <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">extra_args</span> <span class="ow">or</span> <span class="p">()</span> <span class="k">if</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">_LINK_FOLLOWING_RSYNC_ARGS</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">followed</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"extra_args </span><span class="si">{</span><span class="n">followed</span><span class="si">}</span><span class="s2"> make rsync follow links out of rootdir; "</span>
+                    <span class="s2">"pass allow_escape=True to the store to allow that"</span>
+                <span class="p">)</span>
+            <span class="n">rsync_cmd</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"--safe-links"</span><span class="p">)</span>
+
         <span class="c1"># Allow caller-supplied extra args before operands</span>
         <span class="k">if</span> <span class="n">extra_args</span><span class="p">:</span>
             <span class="n">rsync_cmd</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">extra_args</span><span class="p">)</span>
@@ -1358,7 +1444,7 @@
                     <span class="sa">f</span><span class="s2">"subdir has characters outside [</span><span class="se">\\</span><span class="s2">w./@%+=:,-]: </span><span class="si">{</span><span class="n">subdir</span><span class="si">!r}</span><span class="s2"> "</span>
                     <span class="s2">"(rsync may split them in the remote shell)"</span>
                 <span class="p">)</span>
-            <span class="n">remote_root</span> <span class="o">+=</span> <span class="s2">"/"</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">_key_to_path</span><span class="p">(</span><span class="n">subdir</span><span class="p">)</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s2">"/"</span><span class="p">)</span>
+            <span class="n">remote_root</span> <span class="o">+=</span> <span class="s2">"/"</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">_confined_path</span><span class="p">(</span><span class="n">subdir</span><span class="p">)</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s2">"/"</span><span class="p">)</span>
         <span class="n">remote_src</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_conn_user</span><span class="si">}</span><span class="s2">@</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_conn_host</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">remote_root</span><span class="si">}</span><span class="s2">/"</span>
         <span class="n">local_dst</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="s2">""</span><span class="p">)</span>
         <span class="n">rsync_cmd</span> <span class="o">+=</span> <span class="p">[</span><span class="n">remote_src</span><span class="p">,</span> <span class="n">local_dst</span><span class="p">]</span>
@@ -1432,7 +1518,7 @@
       
     </aside>
   </div>
-</div><script src="../../_static/documentation_options.js?v=4bb83394"></script>
+</div><script src="../../_static/documentation_options.js?v=e2f847f2"></script>
     <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/scripts/furo.js?v=46bd48cc"></script>

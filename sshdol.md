@@ -1,4 +1,4 @@
-> built 2026-10-13 09:31 UTC from 1d75463 (master) · sshdol 0.0.10. Details: build_info.json
+> built 2026-10-13 11:03 UTC from d763d77 (master) · sshdol 0.0.11. Details: build_info.json
 
 # index.html.md
 
@@ -301,6 +301,7 @@ Design notes:
 | [`escapes_root`](_autosummary/sshdol.base.html.md#sshdol.base.escapes_root)(path)              | Whether a (normalized, `/`-separated) key path points outside the root.   |
 |----------------------------------------------------------------------------------|---------------------------------------------------------------------------|
 | [`get_ssh_config_for_host`](_autosummary/sshdol.base.html.md#sshdol.base.get_ssh_config_for_host)(host)   | Get SSH configuration for a specific host from the SSH config file.       |
+| [`is_within`](_autosummary/sshdol.base.html.md#sshdol.base.is_within)(real_path, real_root) | Whether an absolute, symlink-free `real_path` is `real_root` or below it. |
 | [`known_hosts_files`](_autosummary/sshdol.base.html.md#sshdol.base.known_hosts_files)([ssh_config]) | The known_hosts files that apply, as OpenSSH chooses them.                |
 | [`normalize_path`](_autosummary/sshdol.base.html.md#sshdol.base.normalize_path)(path)            | Normalize a path to use forward slashes and handle trailing slashes.      |
 | [`read_known_hosts`](_autosummary/sshdol.base.html.md#sshdol.base.read_known_hosts)(files)         | Parse known_hosts `files` leniently into a `paramiko.HostKeys`.           |
@@ -440,6 +441,22 @@ Get SSH configuration for a specific host from the SSH config file.
   Dictionary with SSH configuration parameters
 * **Return type:**
   [*dict*](https://docs.python.org/3/builtins/stdtypes.html#dict)
+
+### sshdol.base.is_within(real_path, real_root)
+
+Whether an absolute, symlink-free `real_path` is `real_root` or below it.
+
+* **Return type:**
+  [`bool`](https://docs.python.org/3/builtins/functions.html#bool)
+
+```pycon
+>>> is_within('/srv/data/a/b', '/srv/data'), is_within('/srv/data', '/srv/data')
+(True, True)
+>>> is_within('/srv/data2/a', '/srv/data'), is_within('/etc', '/srv/data')
+(False, False)
+>>> is_within('/anything', '/')
+True
+```
 
 ### sshdol.base.known_hosts_files(ssh_config=None)
 
@@ -602,18 +619,18 @@ arguments are those of `SshFiles.sync_to`’s implementation: `delete_local_file
 
 # About this build
 
-This documentation was built on **2026-10-13 09:31 UTC** from commit <a href="https://github.com/i2mint/sshdol/commit/1d7546359f5b2167570b6c445a24e5dfdc66b221"><code>1d75463</code></a> on branch <code>master</code>, for **sshdol 0.0.10** (from <code>pyproject.toml</code>).
+This documentation was built on **2026-10-13 11:03 UTC** from commit <a href="https://github.com/i2mint/sshdol/commit/d763d772044afaed7669831700c647484e4468a7"><code>d763d77</code></a> on branch <code>master</code>, for **sshdol 0.0.11** (from <code>pyproject.toml</code>).
 
 #### WARNING
 The documentation and the package may be misaligned:
 
-- The documented version (0.0.10) is behind the latest release on PyPI (0.0.11): `pip install sshdol` gives newer code than these docs describe.
+- The documented version (0.0.11) is behind the latest release on PyPI (0.0.12): `pip install sshdol` gives newer code than these docs describe.
 
 ## Source
 
 |                     |                                                                                                                                                      |
 |---------------------|------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Commit              | <a href="https://github.com/i2mint/sshdol/commit/1d7546359f5b2167570b6c445a24e5dfdc66b221"><code>1d7546359f5b2167570b6c445a24e5dfdc66b221</code></a> |
+| Commit              | <a href="https://github.com/i2mint/sshdol/commit/d763d772044afaed7669831700c647484e4468a7"><code>d763d772044afaed7669831700c647484e4468a7</code></a> |
 | Branch              | <code>master</code>                                                                                                                                  |
 | Tags at this commit | none                                                                                                                                                 |
 | Working tree        | clean                                                                                                                                                |
@@ -624,9 +641,9 @@ The documentation and the package may be misaligned:
 |              |                                                                                            |
 |--------------|--------------------------------------------------------------------------------------------|
 | Repository   | <code>i2mint/sshdol</code>                                                                 |
-| Run          | <a href="https://github.com/i2mint/sshdol/actions/runs/38376845909">38376845909</a>        |
+| Run          | <a href="https://github.com/i2mint/sshdol/actions/runs/38387439862">38387439862</a>        |
 | Ref          | <code>refs/heads/master</code>                                                             |
-| Event commit | <code>1d7546359f5b2167570b6c445a24e5dfdc66b221</code> (in the history of the built commit) |
+| Event commit | <code>d763d772044afaed7669831700c647484e4468a7</code> (in the history of the built commit) |
 
 ## Tools
 
@@ -651,13 +668,13 @@ The documentation and the package may be misaligned:
 
 ## Package on PyPI
 
-Latest release: <a href="https://pypi.org/project/sshdol/0.0.11/">0.0.11</a>, newer than the documented version (0.0.10).
+Latest release: <a href="https://pypi.org/project/sshdol/0.0.12/">0.0.12</a>, newer than the documented version (0.0.11).
 
 ## Reproduce
 
 ```bash
 git clone https://github.com/i2mint/sshdol && cd sshdol
-git checkout 1d7546359f5b2167570b6c445a24e5dfdc66b221
+git checkout d763d772044afaed7669831700c647484e4468a7
 pip install "epythet==0.2.15"
 epythet quickstart . --ignore tests/ scrap/ examples/
 ```
