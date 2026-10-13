@@ -7,14 +7,15 @@ is scoped by ``rootdir``, not by any key view) copied files the view hides and, 
 ``--delete``, pruned the wrong local tree. A free function is handed the outer store itself,
 so it can resolve the key through every wrapping layer before touching the server.
 
-- :func:`mkdir` ``(store, path)`` maps ``path`` through every layer (``inner_most_key``)
-  and returns ``store[path]``, i.e. the caller's wrapped view of the new directory.
+- :func:`mkdir` ``(store, path)`` maps ``path`` through every layer (``inner_most_key``).
 - :func:`sync_to` ``(store, target, subdir=...)`` takes the *bare* store only: rsync cannot
   honour a key view, so a wrapped store (or a wrapped ``target``) is refused with
   :class:`~sshdol.base.WrappedStoreError`. State the scope explicitly with ``subdir=``.
 
 The same design as cosmodol.ops and s3dol's ADR-0011. The ``SshFiles.mkdir`` /
-``SshFiles.sync_to`` methods remain for bare stores and refuse when they detect a wrapper.
+``SshFiles.sync_to`` methods were removed (they raise an ``AttributeError`` naming the
+replacement): a method cannot reliably tell it is wrapped, a free function is handed the
+caller's own store.
 
 >>> from sshdol.ops import mkdir, sync_to  # doctest: +SKIP
 >>> view = KeyCodecs.prefixed("sub/")(SshFiles(host="myserver"))  # doctest: +SKIP
@@ -27,13 +28,15 @@ for a key that does not exist yet), so the directory can be created outside the 
 
 from __future__ import annotations
 
+import os
+
 from dol import inner_most_key
 
 from sshdol.base import (
     SshFiles,
     SshFilesReader,
     WrappedStoreError,
-    _refuse_if_wrapped,
+    _is_wrapped,
     _resolve_sync_target,
 )
 
@@ -50,11 +53,12 @@ def _leaf_of(store) -> SshFilesReader:
     return cur
 
 
-def mkdir(store, path, *, exist_ok: bool = False):
-    """Create directory ``path`` (a key of ``store``) on the server; return ``store[path]``.
+def mkdir(store, path, *, exist_ok: bool = False) -> None:
+    """Create directory ``path`` (a key of ``store``) on the server.
 
     ``path`` is resolved through every layer of ``store`` first, so it lands where
-    ``store[path] = ...`` would write.
+    ``store[path] = ...`` would write. Returns nothing: index ``store[path]`` yourself for
+    the sub-store (a value codec may not be able to decode a directory).
 
     :param store: an ``SshFiles``, wrapped or not
     :param path: a key of ``store``
@@ -64,10 +68,11 @@ def mkdir(store, path, *, exist_ok: bool = False):
     if not isinstance(leaf, SshFiles):
         raise TypeError("mkdir needs a writable SshFiles, got a reader")
     inner = inner_most_key(store, path, default=None)
+    if isinstance(inner, os.PathLike):
+        inner = os.fspath(inner)
     if not isinstance(inner, str):
         inner = path  # no layer maps keys: the key is already a leaf key
     leaf._mkdir_path(inner, exist_ok=exist_ok)
-    return store[path]
 
 
 def sync_to(store, target, *, subdir: str | None = None, **kwargs) -> None:
@@ -79,7 +84,13 @@ def sync_to(store, target, *, subdir: str | None = None, **kwargs) -> None:
     arguments are those of ``SshFiles.sync_to``'s implementation: ``delete_local_files_not_in_remote``,
     ``delete_mode``, ``recycle_bin``, ``compress``, ``extra_args``.
     """
-    _refuse_if_wrapped(store, "sync_to", "the unwrapped store (with subdir=)")
+    if _is_wrapped(store):
+        raise WrappedStoreError(
+            "sync_to needs the bare store: rsync is scoped by rootdir, which no key view "
+            "can narrow, so under a dol wrapper it would copy files the view hides and "
+            "--delete the wrong tree (i2mint/sshdol#6). Pass the unwrapped store and state "
+            "the scope with subdir=."
+        )
     if not isinstance(store, SshFilesReader):
         raise TypeError(f"Expected an SshFilesReader, got {type(store).__name__}")
     store._sync_to(_resolve_sync_target(target), subdir=subdir, **kwargs)

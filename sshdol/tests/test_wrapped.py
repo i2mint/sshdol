@@ -46,27 +46,27 @@ def subdir_view(store, prefix="sub/"):
     return KeyCodecs.prefixed(prefix)(filt_iter(store, filt=lambda k: k.startswith(prefix)))
 
 
-def test_mkdir_bare_unchanged(leaf):
-    assert leaf.mkdir("newdir") == ("got", "newdir")
-    assert leaf._sftp.made == ["newdir"]
-
-
-def test_mkdir_method_refuses_under_instance_wrap(leaf):
-    view = KeyCodecs.prefixed("sub/")(leaf)
-    with pytest.raises(WrappedStoreError):
-        view.mkdir("newdir")  # Route A: reaches the bound leaf method
+def test_mkdir_and_sync_to_methods_removed_with_replacement_named(leaf):
+    with pytest.raises(AttributeError, match=r"sshdol\.ops\.mkdir"):
+        leaf.mkdir("d")
+    with pytest.raises(AttributeError, match=r"sshdol\.ops\.sync_to"):
+        leaf.sync_to("/tmp/x")
+    # ... also when reached through any wrapper, inline or held (no detection needed)
+    with pytest.raises(AttributeError):
+        KeyCodecs.prefixed("sub/")(leaf).mkdir("d")
+    with pytest.raises(AttributeError):
+        KeyCodecs.prefixed("sub/")(leaf).sync_to("/tmp/x", delete_local_files_not_in_remote=True)
     assert leaf._sftp.made == []
 
 
 def test_ops_mkdir_maps_key_and_returns_wrapped_view(leaf):
     view = KeyCodecs.prefixed("sub/")(leaf)
-    got = mkdir(view, "newdir")
+    assert mkdir(view, "newdir") is None
     assert leaf._sftp.made == ["sub", "sub/newdir"]  # parent first; not "newdir"
-    assert got == ("got", "sub/newdir")  # the outer __getitem__ ran: key re-mapped
 
 
 def test_ops_mkdir_bare_store(leaf):
-    assert mkdir(leaf, "d") == ("got", "d")
+    mkdir(leaf, "d")
     assert leaf._sftp.made == ["d"]
 
 
@@ -77,8 +77,14 @@ def test_ops_mkdir_under_class_wrap(leaf, monkeypatch):
     w.store.__dict__.update(leaf.__dict__)
     mkdir(w, "newdir")
     assert w.store._sftp.made == ["sub", "sub/newdir"]
-    with pytest.raises(WrappedStoreError):
-        w.mkdir("newdir2")
+
+
+def test_ops_mkdir_pathlike_inner_key(leaf):
+    import pathlib
+
+    view = dol.wrap_kvs(leaf, id_of_key=lambda k: pathlib.PurePosixPath("sub") / k)
+    mkdir(view, "nd")
+    assert leaf._sftp.made == ["sub", "sub/nd"]
 
 
 def test_ops_mkdir_still_confined_to_rootdir(leaf):
@@ -108,35 +114,62 @@ def rsync(monkeypatch, tmp_path):
 
 
 def test_sync_to_bare_unchanged(leaf, rsync, tmp_path):
-    leaf.sync_to(tmp_path / "dst", delete_local_files_not_in_remote=True)
+    sync_to(leaf, tmp_path / "dst", delete_local_files_not_in_remote=True)
     cmd = rsync[0]
     assert cmd[-2] == "u@h:/remote/root/" and "--delete" in cmd
     assert cmd[-1] == str(tmp_path / "dst") + "/"
 
 
 def test_sync_to_refuses_wrapped_source(leaf, rsync, tmp_path):
-    view = subdir_view(leaf)
-    for call in (
-        lambda: view.sync_to(tmp_path / "d", delete_local_files_not_in_remote=True),
-        lambda: sync_to(view, tmp_path / "d", delete_local_files_not_in_remote=True),
+    for view in (
+        subdir_view(leaf),
+        filt_iter(leaf, filt=lambda k: k.startswith("sub/")),
+        KeyCodecs.prefixed("sub/")(leaf),
     ):
         with pytest.raises(WrappedStoreError):
-            call()
+            sync_to(view, tmp_path / "d", delete_local_files_not_in_remote=True)
     assert rsync == [] and not (tmp_path / "d").exists()
 
 
-def test_sync_to_refuses_wrapped_target(leaf, rsync, tmp_path):
+def test_sync_to_bare_store_unaffected_by_live_wrapper(leaf, rsync, tmp_path):
+    view = KeyCodecs.prefixed("sub/")(leaf)  # a sibling wrapper exists: leaf is still bare
+    sync_to(leaf, tmp_path / "d")
+    assert len(rsync) == 1 and view is not None
+
+
+@pytest.fixture
+def local(tmp_path):
     (tmp_path / "local" / "mirror").mkdir(parents=True)
-    tgt = subdir_view(dol.Files(str(tmp_path / "local")), "mirror/")
-    with pytest.raises(WrappedStoreError):
-        sync_to(leaf, tgt, delete_local_files_not_in_remote=True)
+    return tmp_path / "local"
+
+
+def test_sync_to_plain_dol_files_target_ok(leaf, rsync, local):
+    sync_to(leaf, dol.Files(str(local)))
+    assert rsync[0][-1] == str(local) + "/"
+
+
+def test_sync_to_refuses_every_narrowed_target(leaf, rsync, local):
+    root = str(local)
+
+    class MyFiles(dol.Files):
+        pass
+
+    class Plain:  # the formerly documented "anything with a .rootdir"
+        rootdir = root
+
+    targets = {
+        "prefixed instance": subdir_view(dol.Files(root), "mirror/"),
+        "filter instance": filt_iter(dol.Files(root), filt=lambda k: k.endswith(".txt")),
+        "filter class wrap": filt_iter(filt=lambda k: k.endswith(".txt"))(dol.Files)(root),
+        "prefixed class wrap": KeyCodecs.prefixed("mirror/")(dol.Files)(root),
+        "subpath": dol.Files(root, subpath="mirror"),
+        "subclass": MyFiles(root),
+        "plain object": Plain(),
+    }
+    for name, tgt in targets.items():
+        with pytest.raises(WrappedStoreError):
+            sync_to(leaf, tgt, delete_local_files_not_in_remote=True)
     assert rsync == []
-
-
-def test_sync_to_bare_dol_files_target_still_works(leaf, rsync, tmp_path):
-    (tmp_path / "local").mkdir()
-    sync_to(leaf, dol.Files(str(tmp_path / "local")))
-    assert rsync[0][-1] == str(tmp_path / "local") + "/"
 
 
 def test_sync_to_explicit_subdir(leaf, rsync, tmp_path):
@@ -144,10 +177,3 @@ def test_sync_to_explicit_subdir(leaf, rsync, tmp_path):
     assert rsync[0][-2] == "u@h:/remote/root/sub/"
     with pytest.raises(KeyError, match="outside rootdir"):
         sync_to(leaf, tmp_path / "d", subdir="../etc")
-
-
-def test_sync_to_refuses_filter_only_target(leaf, rsync, tmp_path):
-    (tmp_path / "local").mkdir()
-    tgt = filt_iter(dol.Files(str(tmp_path / "local")), filt=lambda k: k.endswith(".txt"))
-    with pytest.raises(WrappedStoreError):
-        sync_to(leaf, tgt, delete_local_files_not_in_remote=True)

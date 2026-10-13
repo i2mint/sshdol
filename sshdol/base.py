@@ -245,76 +245,48 @@ def split_path(path: str) -> tuple[str, str]:
     return "/".join(parts[:-1]), parts[-1]
 
 
+_MOVED = (
+    "SshFiles.{old}() was removed: a method of a dol-wrapped store runs bound to the leaf and "
+    "sees the caller's unmapped key / the leaf's whole rootdir (i2mint/sshdol#6). "
+    "Use {new}."
+)
+
+
 class WrappedStoreError(ValueError):
-    """A scope-wide or keyed operation was called through a ``dol`` wrapper (i2mint/sshdol#6)."""
+    """A scope-wide operation was given a ``dol``-wrapped store or target (i2mint/sshdol#6)."""
 
 
 def _is_wrapped(obj) -> bool:
-    """True if ``obj`` is, or sits under, a ``dol`` wrapper (key/value/scope transform)."""
-    if isinstance(obj, (str, os.PathLike)):
-        return False
-    if hasattr(obj, "store"):  # a dol Store / delegating class wrap holds its inner as .store
-        return True
-    from dol import wrapped_self
-
-    return wrapped_self(obj) is not obj
-
-
-def _refuse_if_wrapped(store, what: str, instead: str) -> None:
-    if _is_wrapped(store):
-        raise WrappedStoreError(
-            f"{what}() reached the leaf store through a dol wrapper, which would hand it "
-            f"the caller's unmapped key / bypass the view's scope (i2mint/sshdol#6). "
-            f"Use {instead}."
-        )
-
-
-_BARE_FILES_MODULE = "dol.filesys"  # layers of a plain ``dol.Files``
-
-
-def _target_remaps_keys(target) -> bool:
-    """True if ``target`` maps keys to anything but ``<rootdir>/<key>``.
-
-    A bare ``dol.Files`` is itself a delegating class (it has a ``.store``) yet its view root
-    *is* its ``rootdir``; a key codec / subpath on top makes the two differ, which is exactly
-    when ``.rootdir`` (the leaf's) misleads. Probe with a key instead of guessing from types.
-    """
-    rootdir = getattr(target, "rootdir", None)
-    if not isinstance(rootdir, str):
-        return False
-    from dol import inner_most_key
-
-    layer = target  # any generic layer (filt_iter, wrap_kvs, ...) may hide files
-    while layer is not None:
-        # (a bare dol.Files holds its own pre-wrap class as ``.store``: match by module)
-        if not type(layer).__module__.startswith(_BARE_FILES_MODULE):
-            return True
-        layer = getattr(layer, "store", None)
-    probe = "sshdol-probe"
-    resolved = inner_most_key(target, probe, default=None)
-    if resolved is None:
-        return _is_wrapped(target)
-    return os.path.normpath(os.fspath(resolved)) != os.path.normpath(
-        os.path.join(rootdir, probe)
-    )
+    """True if ``obj`` is a ``dol`` wrapper layer (it holds its inner store as ``.store``)."""
+    return not isinstance(obj, (str, os.PathLike)) and hasattr(obj, "store")
 
 
 def _resolve_sync_target(target) -> str:
-    """The local directory a ``sync_to`` target denotes (a path, or an object's ``.rootdir``)."""
-    if isinstance(target, Path):
-        return str(target)
-    if isinstance(target, str):
-        return target
-    if _target_remaps_keys(target):
-        raise WrappedStoreError(
-            "sync_to target is wrapped by a dol transform, whose .rootdir is the "
-            "leaf's directory, not the view's: rsync --delete would act on the whole "
-            "leaf directory (i2mint/sshdol#6). Pass the local directory path instead."
-        )
+    """The local directory a ``sync_to`` target denotes.
+
+    A path (``str`` / ``PathLike``) is itself. The only object accepted is a plain
+    ``dol.Files`` (exact type, no ``subpath`` / ``pattern_for_field``): anything else, such as
+    a key codec, a filter, a subclass or a class wrap, may show a narrower view than its
+    ``.rootdir``, which is the leaf's, and ``rsync --delete`` would then prune the whole
+    ``rootdir`` (i2mint/sshdol#6). For those, pass the local directory path.
+    """
+    if isinstance(target, (str, os.PathLike)):
+        return os.fspath(target)
+    from dol import Files
+
     rootdir = getattr(target, "rootdir", None)
-    if isinstance(rootdir, str) and os.path.exists(rootdir):
+    if (
+        type(target) is Files
+        and isinstance(rootdir, str)
+        and not getattr(target, "subpath", "")
+        and getattr(target, "pattern_for_field", None) is None
+    ):
         return rootdir
-    return target
+    raise WrappedStoreError(
+        f"sync_to target {type(target).__name__} is not a path or a plain dol.Files: its "
+        f".rootdir may be wider than the view it shows, and rsync --delete would act on "
+        f"all of it (i2mint/sshdol#6). Pass the local directory path instead."
+    )
 
 
 class SshFilesReader(Mapping):
@@ -987,46 +959,27 @@ class SshFiles(SshFilesReader, MutableMapping):
                 raise KeyError(f"Failed to create directory {path}: {str(e)}")
         return path
 
-    def mkdir(self, path, exist_ok=False):
+    def mkdir(self, *args, **kwargs):
+        """Removed: use ``sshdol.ops.mkdir(store, path)``.
+
+        A method runs bound to the leaf, so under a ``dol`` key transform it received the
+        caller's unmapped key and created the directory in the wrong place (i2mint/sshdol#6).
         """
-        Create a directory on the SSH server.
-
-        This method is for a bare (unwrapped) store. Under a ``dol`` key transform it would
-        receive the caller's *outer* key and create the directory in the wrong place
-        (i2mint/sshdol#6), so it refuses when it detects a wrapper: use
-        ``sshdol.ops.mkdir(store, path)`` there, which maps the key first.
-
-        Args:
-            path: Directory path to create
-            exist_ok: If True, don't raise an error if directory already exists
-
-        Returns:
-            SshFiles: A new instance for the created directory
-
-        Raises:
-            KeyError: If directory cannot be created
-            WrappedStoreError: If this store is wrapped by a dol transform
-        """
-        _refuse_if_wrapped(self, "mkdir", "sshdol.ops.mkdir(store, path)")
-        path = self._mkdir_path(path, exist_ok=exist_ok)
-        # Return a new instance for the created directory
-        return self[path]
+        raise AttributeError(_MOVED.format(old="mkdir", new="sshdol.ops.mkdir(store, path)"))
 
     # -----------------------
     # High-performance syncs
     # -----------------------
-    def sync_to(self, target: str, **kwargs) -> None:
-        """Synchronize remote rootdir to a local directory using rsync over SSH.
+    def sync_to(self, *args, **kwargs):
+        """Removed: use ``sshdol.ops.sync_to(store, target, subdir=...)``.
 
-        For a bare (unwrapped) store, with a string/``Path`` target or a bare ``.rootdir``
-        object. It refuses when this store, or ``target``, is wrapped by a ``dol`` transform:
-        rsync is scoped by ``rootdir``, not by any key view, so under a wrapper it would
-        copy files the view hides and ``--delete`` against the wrong tree (i2mint/sshdol#6).
-        Use ``sshdol.ops.sync_to(store, target, subdir=...)`` to state the scope explicitly.
-        See :meth:`_sync_to` for the keyword arguments.
+        rsync is scoped by ``rootdir``, not by any key view, so called through a ``dol``
+        wrapper this method copied files the view hides and ``--delete`` pruned the wrong
+        tree (i2mint/sshdol#6).
         """
-        _refuse_if_wrapped(self, "sync_to", "sshdol.ops.sync_to(store, target)")
-        return self._sync_to(_resolve_sync_target(target), **kwargs)
+        raise AttributeError(
+            _MOVED.format(old="sync_to", new="sshdol.ops.sync_to(store, target, subdir=...)")
+        )
 
     def _sync_to(
         self,
