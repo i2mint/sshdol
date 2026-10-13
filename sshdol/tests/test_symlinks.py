@@ -142,3 +142,30 @@ def test_sync_to_subdir_symlink_refused_and_links_skipped(stores, tmp_path):
     assert (tmp_path / "d2" / "sub" / "inside.txt").read_bytes() == b"inside"
     assert not (tmp_path / "d2" / "sub" / "leak").exists()
     assert not (tmp_path / "d2" / "sub" / "leak").is_symlink()
+
+
+def test_subdir_instance_listing_agrees_with_sftp_on_dotdot_after_link(stores):
+    """Shell ``cd`` used to resolve ``..`` by text, listing the outside directory."""
+    store, sftp, outside = stores
+    sftp.mkdir(BASE + "/root/sub/a")
+    sftp.mkdir(BASE + "/root/sub/Y")
+    sftp.symlink(BASE + "/root/sub/a", BASE + "/root/deep")
+    sftp.symlink(outside, BASE + "/root/Y")
+    # physically deep/../Y is root/sub/Y (inside); textually it is root/Y -> outside
+    child = store["deep/../Y"]
+    assert list(child) == [] and len(child) == 0
+    assert "secret.txt" not in child
+
+
+def test_missing_rootdir_shell_listing_is_empty_not_home(stores):
+    gone = SshFiles(
+        host=SSH_TEST_HOST, rootdir=BASE + "/root/does_not_exist", max_levels=None
+    )
+    assert list(gone) == [] and "py" not in gone
+
+
+@pytest.mark.parametrize("flag", ["-L", "--copy-links", "--copy-unsafe-links", "-k"])
+def test_sync_to_refuses_link_following_args(stores, tmp_path, flag):
+    store, _, _ = stores
+    with pytest.raises(ValueError, match="allow_escape"):
+        sync_to(store, tmp_path / "d", extra_args=[flag])

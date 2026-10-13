@@ -104,6 +104,7 @@ def escapes_root(path: str) -> bool:
     return normalized == ".." or normalized.startswith("../")
 
 
+_LINK_FOLLOWING_RSYNC_ARGS = ("-L", "--copy-links", "--copy-unsafe-links", "-k", "--copy-dirlinks")
 MAX_SYMLINK_HOPS = 40  # same order as the kernel's ELOOP limit
 
 
@@ -578,7 +579,7 @@ class SshFilesReader(Mapping):
             quoted_root = shlex.quote(self.rootdir)
             quoted_path = shlex.quote(normalize_path(path))
             cmd = (
-                f"cd {quoted_root} 2>/dev/null || true; "
+                f"cd -P -- {quoted_root} 2>/dev/null || exit 1; "
                 f"if [ -e {quoted_path} ]; then echo 0; else echo 1; fi"
             )
             stdin, stdout, stderr = self._ssh.exec_command(cmd)
@@ -634,7 +635,7 @@ class SshFilesReader(Mapping):
             find_cmd = (
                 f"find . -mindepth 1 {maxdepth_clause}{prune_hidden}-printf '%y\t%P\n'"
             )
-            cmd = f"set -e; cd {quoted_root} 2>/dev/null || true; {find_cmd}"
+            cmd = f"set -e; cd -P -- {quoted_root} 2>/dev/null || exit 1; {find_cmd}"
             stdin, stdout, stderr = self._ssh.exec_command(cmd)
             data = stdout.read()
             text = (
@@ -687,6 +688,27 @@ class SshFilesReader(Mapping):
             )
         return True
 
+    def _subdir_store(self, path):
+        """A new instance (own connection) rooted at directory ``path`` of this one.
+
+        Its rootdir is the *resolved* path, not ``rootdir/path`` as text: the remote shell
+        (listing, ``in``) and SFTP must agree on where ``..`` after a symbolic link leads
+        (i2mint/sshdol#11).
+        """
+        if self._allow_escape:
+            new_rootdir = (
+                path
+                if self.rootdir == "."
+                else f"{self.rootdir.rstrip('/')}/{path}"
+            )
+        else:
+            new_rootdir = self._real_path(path)
+        return type(self)(
+            **self._init_params,
+            rootdir=new_rootdir,
+            _pinned_host_key=getattr(self, "_pinned_host_key", None),
+        )
+
     def __getitem__(self, k):
         """
         Get contents of a file or return a new instance for directories.
@@ -715,26 +737,7 @@ class SshFilesReader(Mapping):
 
             # Check if the whole path is a directory
             if is_dir:
-                # Create a new instance for this subdirectory
-                params = self._init_params.copy()
-
-                # Create new path by joining current rootdir with the key
-                if self.rootdir == ".":
-                    new_rootdir = path
-                else:
-                    new_rootdir = (
-                        f"{self.rootdir}/{path}"
-                        if not self.rootdir.endswith("/")
-                        else f"{self.rootdir}{path}"
-                    )
-
-                # Create a completely new connection for the subdirectory
-                new_instance = type(self)(
-                    **params,
-                    rootdir=new_rootdir,
-                    _pinned_host_key=getattr(self, "_pinned_host_key", None),
-                )
-                return new_instance
+                return self._subdir_store(path)
 
             # Try to open as a file
             try:
@@ -749,26 +752,7 @@ class SshFilesReader(Mapping):
 
         # Handle direct directory or file access (no slashes)
         if is_dir:
-            # Create a new instance for this subdirectory
-            params = self._init_params.copy()
-
-            # Create new path by joining current rootdir with the key
-            if self.rootdir == ".":
-                new_rootdir = path
-            else:
-                new_rootdir = (
-                    f"{self.rootdir}/{path}"
-                    if not self.rootdir.endswith("/")
-                    else f"{self.rootdir}{path}"
-                )
-
-            # Create a completely new connection for the subdirectory
-            new_instance = type(self)(
-                **params,
-                rootdir=new_rootdir,
-                _pinned_host_key=getattr(self, "_pinned_host_key", None),
-            )
-            return new_instance
+            return self._subdir_store(path)
 
         # If it's a file, return its contents
         try:
@@ -834,7 +818,7 @@ class SshFilesReader(Mapping):
             else:
                 type_clause = "-type f"
             find_cmd = f"find . -mindepth 1 {maxdepth_clause}{prune_hidden}{type_clause} -print | wc -l"
-            cmd = f"set -e; cd {quoted_root} 2>/dev/null || true; {find_cmd}"
+            cmd = f"set -e; cd -P -- {quoted_root} 2>/dev/null || exit 1; {find_cmd}"
             stdin, stdout, stderr = self._ssh.exec_command(cmd)
             out = stdout.read().decode().strip()
             return int(out) if out.isdigit() else 0
@@ -1093,7 +1077,11 @@ class SshFiles(SshFilesReader, MutableMapping):
             recycle_bin: When delete_mode='recycle', directory to store deleted items.
                 Defaults to the OS recycle location (macOS: ~/.Trash, Linux: ~/.local/share/Trash/files).
             compress: If True, use -z compression.
-            extra_args: Additional rsync args (list of strings) to append.
+            extra_args: Additional rsync args (list of strings) to append. Unless the
+                store has ``allow_escape=True``, link-following ones (``-L``, ``-k``,
+                ``--copy-links``, ``--copy-unsafe-links``, ``--copy-dirlinks``) are refused
+                and ``--safe-links`` is passed, which skips absolute symbolic links and
+                relative ones that leave the synced tree (judged by their text).
 
         Raises:
             RuntimeError: If rsync is unavailable or the sync fails.
@@ -1148,6 +1136,12 @@ class SshFiles(SshFilesReader, MutableMapping):
                 rsync_cmd.append(delete_flag_map[delete_mode])
 
         if not self._allow_escape:  # links in the tree must not point out of it
+            followed = [a for a in extra_args or () if a in _LINK_FOLLOWING_RSYNC_ARGS]
+            if followed:
+                raise ValueError(
+                    f"extra_args {followed} make rsync follow links out of rootdir; "
+                    "pass allow_escape=True to the store to allow that"
+                )
             rsync_cmd.append("--safe-links")
 
         # Allow caller-supplied extra args before operands
