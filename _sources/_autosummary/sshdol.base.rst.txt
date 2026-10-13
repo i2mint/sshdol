@@ -12,6 +12,7 @@ sshdol.base
       get_ssh_config_for_host
       is_within
       known_hosts_files
+      local_rsync_version
       normalize_path
       read_known_hosts
       resolve_host_key_policy

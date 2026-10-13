@@ -280,16 +280,19 @@
 <tr class="row-even"><td><p><a class="reference internal" href="#sshdol.base.known_hosts_files" title="sshdol.base.known_hosts_files"><code class="xref py py-obj docutils literal notranslate"><span class="pre">known_hosts_files</span></code></a>([ssh_config])</p></td>
 <td><p>The known_hosts files that apply, as OpenSSH chooses them.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#sshdol.base.normalize_path" title="sshdol.base.normalize_path"><code class="xref py py-obj docutils literal notranslate"><span class="pre">normalize_path</span></code></a>(path)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#sshdol.base.local_rsync_version" title="sshdol.base.local_rsync_version"><code class="xref py py-obj docutils literal notranslate"><span class="pre">local_rsync_version</span></code></a>()</p></td>
+<td><p>Version of the local <code class="docutils literal notranslate"><span class="pre">rsync</span></code> as a tuple, <code class="docutils literal notranslate"><span class="pre">()</span></code> if it cannot be determined.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#sshdol.base.normalize_path" title="sshdol.base.normalize_path"><code class="xref py py-obj docutils literal notranslate"><span class="pre">normalize_path</span></code></a>(path)</p></td>
 <td><p>Normalize a path to use forward slashes and handle trailing slashes.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#sshdol.base.read_known_hosts" title="sshdol.base.read_known_hosts"><code class="xref py py-obj docutils literal notranslate"><span class="pre">read_known_hosts</span></code></a>(files)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#sshdol.base.read_known_hosts" title="sshdol.base.read_known_hosts"><code class="xref py py-obj docutils literal notranslate"><span class="pre">read_known_hosts</span></code></a>(files)</p></td>
 <td><p>Parse known_hosts <code class="docutils literal notranslate"><span class="pre">files</span></code> leniently into a <code class="docutils literal notranslate"><span class="pre">paramiko.HostKeys</span></code>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#sshdol.base.resolve_host_key_policy" title="sshdol.base.resolve_host_key_policy"><code class="xref py py-obj docutils literal notranslate"><span class="pre">resolve_host_key_policy</span></code></a>([...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#sshdol.base.resolve_host_key_policy" title="sshdol.base.resolve_host_key_policy"><code class="xref py py-obj docutils literal notranslate"><span class="pre">resolve_host_key_policy</span></code></a>([...])</p></td>
 <td><p>The paramiko policy for hosts whose key is not in <code class="docutils literal notranslate"><span class="pre">known_hosts</span></code>.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#sshdol.base.split_path" title="sshdol.base.split_path"><code class="xref py py-obj docutils literal notranslate"><span class="pre">split_path</span></code></a>(path)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#sshdol.base.split_path" title="sshdol.base.split_path"><code class="xref py py-obj docutils literal notranslate"><span class="pre">split_path</span></code></a>(path)</p></td>
 <td><p>Split a path into directory and file parts.</p></td>
 </tr>
 </tbody>
@@ -484,6 +487,21 @@ Only existing files are returned.</p>
 </dd></dl>
 
 <dl class="py function">
+<dt class="sig sig-object py" id="sshdol.base.local_rsync_version">
+<span class="sig-prename descclassname"><span class="pre">sshdol.base.</span></span><span class="sig-name descname"><span class="pre">local_rsync_version</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/sshdol/base.html#local_rsync_version"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sshdol.base.local_rsync_version" title="Link to this definition">¶</a></dt>
+<dd><p>Version of the local <code class="docutils literal notranslate"><span class="pre">rsync</span></code> as a tuple, <code class="docutils literal notranslate"><span class="pre">()</span></code> if it cannot be determined.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tuple</span></code></a>[<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a>, <a class="reference external" href="https://docs.python.org/3/builtins/constants.html#Ellipsis" title="(in Python v3.15)"><code class="xref py py-data docutils literal notranslate"><span class="pre">...</span></code></a>]</span></p>
+</dd>
+</dl>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">local_rsync_version</span><span class="p">()</span> <span class="o">==</span> <span class="p">()</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">local_rsync_version</span><span class="p">())</span> <span class="o">&gt;=</span> <span class="mi">2</span>
+<span class="go">True</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
 <dt class="sig sig-object py" id="sshdol.base.normalize_path">
 <span class="sig-prename descclassname"><span class="pre">sshdol.base.</span></span><span class="sig-name descname"><span class="pre">normalize_path</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/sshdol/base.html#normalize_path"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#sshdol.base.normalize_path" title="Link to this definition">¶</a></dt>
 <dd><p>Normalize a path to use forward slashes and handle trailing slashes.</p>
@@ -622,6 +640,7 @@ A key that <em>changed</em> is always refused by paramiko.</p>
 <li><a class="reference internal" href="#sshdol.base.get_ssh_config_for_host"><code class="docutils literal notranslate"><span class="pre">get_ssh_config_for_host()</span></code></a></li>
 <li><a class="reference internal" href="#sshdol.base.is_within"><code class="docutils literal notranslate"><span class="pre">is_within()</span></code></a></li>
 <li><a class="reference internal" href="#sshdol.base.known_hosts_files"><code class="docutils literal notranslate"><span class="pre">known_hosts_files()</span></code></a></li>
+<li><a class="reference internal" href="#sshdol.base.local_rsync_version"><code class="docutils literal notranslate"><span class="pre">local_rsync_version()</span></code></a></li>
 <li><a class="reference internal" href="#sshdol.base.normalize_path"><code class="docutils literal notranslate"><span class="pre">normalize_path()</span></code></a></li>
 <li><a class="reference internal" href="#sshdol.base.read_known_hosts"><code class="docutils literal notranslate"><span class="pre">read_known_hosts()</span></code></a></li>
 <li><a class="reference internal" href="#sshdol.base.resolve_host_key_policy"><code class="docutils literal notranslate"><span class="pre">resolve_host_key_policy()</span></code></a></li>
@@ -637,7 +656,7 @@ A key that <em>changed</em> is always refused by paramiko.</p>
       
     </aside>
   </div>
-</div><script src="../_static/documentation_options.js?v=c249dd19"></script>
+</div><script src="../_static/documentation_options.js?v=6b09a97f"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/scripts/furo.js?v=46bd48cc"></script>

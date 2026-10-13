@@ -22,6 +22,7 @@ Design notes:
 | [`get_ssh_config_for_host`](#sshdol.base.get_ssh_config_for_host)(host)   | Get SSH configuration for a specific host from the SSH config file.       |
 | [`is_within`](#sshdol.base.is_within)(real_path, real_root) | Whether an absolute, symlink-free `real_path` is `real_root` or below it. |
 | [`known_hosts_files`](#sshdol.base.known_hosts_files)([ssh_config]) | The known_hosts files that apply, as OpenSSH chooses them.                |
+| [`local_rsync_version`](#sshdol.base.local_rsync_version)()           | Version of the local `rsync` as a tuple, `()` if it cannot be determined. |
 | [`normalize_path`](#sshdol.base.normalize_path)(path)            | Normalize a path to use forward slashes and handle trailing slashes.      |
 | [`read_known_hosts`](#sshdol.base.read_known_hosts)(files)         | Parse known_hosts `files` leniently into a `paramiko.HostKeys`.           |
 | [`resolve_host_key_policy`](#sshdol.base.resolve_host_key_policy)([...])  | The paramiko policy for hosts whose key is not in `known_hosts`.          |
@@ -184,6 +185,18 @@ The known_hosts files that apply, as OpenSSH chooses them.
 `GlobalKnownHostsFile` / `UserKnownHostsFile` from the host’s ssh config
 replace the defaults (`/dev/null` or `none` means “no file”).
 Only existing files are returned.
+
+### sshdol.base.local_rsync_version()
+
+Version of the local `rsync` as a tuple, `()` if it cannot be determined.
+
+* **Return type:**
+  [`tuple`](https://docs.python.org/3/builtins/stdtypes.html#tuple)[[`int`](https://docs.python.org/3/builtins/functions.html#int), [`...`](https://docs.python.org/3/builtins/constants.html#Ellipsis)]
+
+```pycon
+>>> local_rsync_version() == () or len(local_rsync_version()) >= 2
+True
+```
 
 ### sshdol.base.normalize_path(path)
 

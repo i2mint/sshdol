@@ -582,7 +582,37 @@
 
 <span class="n">_SAFE_SUBDIR</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span>
     <span class="sa">r</span><span class="s2">"^[\w./@%+=:,-]+$"</span>
-<span class="p">)</span>  <span class="c1"># no spaces/shell metacharacters (old rsyncs)</span>
+<span class="p">)</span>  <span class="c1"># no spaces/shell metacharacters (old rsyncs split the remote path in a shell)</span>
+<span class="n">_UNPRINTABLE</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">"[\x00-\x1f\x7f]"</span><span class="p">)</span>
+<span class="n">_RSYNC_GLOB</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">"[*?\[\]]"</span><span class="p">)</span>  <span class="c1"># the remote rsync expands these itself, even with -s</span>
+<span class="n">PROTECT_ARGS_MIN_RSYNC</span> <span class="o">=</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>  <span class="c1"># from here on the remote path is not shell-split with -s</span>
+
+
+<span class="n">_rsync_version_cache</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+
+<div class="viewcode-block" id="local_rsync_version">
+<a class="viewcode-back" href="../../_autosummary/sshdol.base.html#sshdol.base.local_rsync_version">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">local_rsync_version</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Version of the local ``rsync`` as a tuple, ``()`` if it cannot be determined.</span>
+
+<span class="sd">    &gt;&gt;&gt; local_rsync_version() == () or len(local_rsync_version()) &gt;= 2</span>
+<span class="sd">    True</span>
+<span class="sd">    """</span>
+    <span class="k">global</span> <span class="n">_rsync_version_cache</span>
+    <span class="k">if</span> <span class="n">_rsync_version_cache</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">out</span> <span class="o">=</span> <span class="n">subprocess</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
+                <span class="p">[</span><span class="s2">"rsync"</span><span class="p">,</span> <span class="s2">"--version"</span><span class="p">],</span> <span class="n">capture_output</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">text</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">10</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">stdout</span>
+        <span class="k">except</span> <span class="p">(</span><span class="ne">OSError</span><span class="p">,</span> <span class="n">subprocess</span><span class="o">.</span><span class="n">SubprocessError</span><span class="p">):</span>
+            <span class="k">return</span> <span class="p">()</span>  <span class="c1"># not cached: a temporary failure is not remembered</span>
+        <span class="n">m</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="sa">r</span><span class="s2">"version v?(\d+)\.(\d+)(?:\.(\d+))?"</span><span class="p">,</span> <span class="n">out</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">m</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">()</span>
+        <span class="n">_rsync_version_cache</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">m</span><span class="o">.</span><span class="n">groups</span><span class="p">()</span> <span class="k">if</span> <span class="n">x</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">_rsync_version_cache</span></div>
+
 
 
 <div class="viewcode-block" id="SshFilesReader">
@@ -1490,10 +1520,19 @@
         <span class="n">remote_root</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rootdir</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s2">"/"</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">subdir</span><span class="p">:</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">_SAFE_SUBDIR</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">subdir</span><span class="p">):</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">"subdir has characters outside [</span><span class="se">\\</span><span class="s2">w./@%+=:,-]: </span><span class="si">{</span><span class="n">subdir</span><span class="si">!r}</span><span class="s2"> "</span>
-                    <span class="s2">"(rsync may split them in the remote shell)"</span>
-                <span class="p">)</span>
+                <span class="k">if</span> <span class="n">_UNPRINTABLE</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">subdir</span><span class="p">):</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"subdir has control characters: </span><span class="si">{</span><span class="n">subdir</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">_RSYNC_GLOB</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">subdir</span><span class="p">):</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">"subdir has rsync wildcard characters (* ? [ ]): </span><span class="si">{</span><span class="n">subdir</span><span class="si">!r}</span><span class="s2">; the "</span>
+                        <span class="s2">"remote rsync would expand them past the symlink-confinement check"</span>
+                    <span class="p">)</span>
+                <span class="k">if</span> <span class="n">local_rsync_version</span><span class="p">()</span> <span class="o">&lt;</span> <span class="n">PROTECT_ARGS_MIN_RSYNC</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">"subdir has characters outside [</span><span class="se">\\</span><span class="s2">w./@%+=:,-]: </span><span class="si">{</span><span class="n">subdir</span><span class="si">!r}</span><span class="s2">, which "</span>
+                        <span class="s2">"rsync older than 3.2.4 may split in the remote shell"</span>
+                    <span class="p">)</span>
+                <span class="n">rsync_cmd</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"-s"</span><span class="p">)</span>  <span class="c1"># --protect-args: no remote-shell splitting (not for globs: above)</span>
             <span class="n">remote_root</span> <span class="o">+=</span> <span class="s2">"/"</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">_confined_path</span><span class="p">(</span><span class="n">subdir</span><span class="p">)</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s2">"/"</span><span class="p">)</span>
         <span class="n">remote_src</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_conn_user</span><span class="si">}</span><span class="s2">@</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_conn_host</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">remote_root</span><span class="si">}</span><span class="s2">/"</span>
         <span class="n">local_dst</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="s2">""</span><span class="p">)</span>
@@ -1568,7 +1607,7 @@
       
     </aside>
   </div>
-</div><script src="../../_static/documentation_options.js?v=c249dd19"></script>
+</div><script src="../../_static/documentation_options.js?v=6b09a97f"></script>
     <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/scripts/furo.js?v=46bd48cc"></script>

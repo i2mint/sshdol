@@ -1,32 +1,32 @@
 {
   "schema_version": 1,
-  "built_at": "2026-10-13T11:17:15Z",
+  "built_at": "2026-10-13T11:23:11Z",
   "package": {
     "name": "sshdol",
-    "version": "0.0.12",
+    "version": "0.0.13",
     "display_name": "sshdol",
     "source": "pyproject.toml"
   },
   "git": {
     "available": true,
-    "commit": "bf560e85ac4e6ad4f5707515a1351c73ade16e97",
-    "short_commit": "bf560e8",
+    "commit": "9be93993294908124acb12196f1ef4e55424b7d3",
+    "short_commit": "9be9399",
     "branch": "master",
     "tags": [],
     "dirty": false,
     "remote_url": "https://github.com/i2mint/sshdol",
-    "commit_url": "https://github.com/i2mint/sshdol/commit/bf560e85ac4e6ad4f5707515a1351c73ade16e97",
+    "commit_url": "https://github.com/i2mint/sshdol/commit/9be93993294908124acb12196f1ef4e55424b7d3",
     "error": null
   },
   "ci": {
     "provider": "github",
     "repository": "i2mint/sshdol",
-    "sha": "bf560e85ac4e6ad4f5707515a1351c73ade16e97",
+    "sha": "9be93993294908124acb12196f1ef4e55424b7d3",
     "sha_in_history": true,
     "ref": "refs/heads/master",
     "ref_name": "master",
-    "run_id": "38389034112",
-    "run_url": "https://github.com/i2mint/sshdol/actions/runs/38389034112",
+    "run_id": "38389708400",
+    "run_url": "https://github.com/i2mint/sshdol/actions/runs/38389708400",
     "server_url": "https://github.com"
   },
   "tools": {
@@ -56,15 +56,15 @@
   },
   "site": {
     "modules_documented": 3,
-    "objects_documented": 19
+    "objects_documented": 20
   },
   "pypi": {
     "checked": true,
-    "latest": "0.0.12",
+    "latest": "0.0.13",
     "relation": "same",
     "error": null
   },
-  "reproduce": "git clone https://github.com/i2mint/sshdol && cd sshdol\ngit checkout bf560e85ac4e6ad4f5707515a1351c73ade16e97\npip install \"epythet==0.2.15\"\nepythet quickstart . --ignore tests/ scrap/ examples/",
+  "reproduce": "git clone https://github.com/i2mint/sshdol && cd sshdol\ngit checkout 9be93993294908124acb12196f1ef4e55424b7d3\npip install \"epythet==0.2.15\"\nepythet quickstart . --ignore tests/ scrap/ examples/",
   "warnings": [],
   "alignment": {
     "aligned": true,
