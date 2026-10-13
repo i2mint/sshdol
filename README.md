@@ -72,26 +72,24 @@ You can also use higher-level helpers such as `xdol.update_with_policy` to contr
 
 - High-performance (recommended for many files):
 
-Use `sshdol.sync_to(src, target)`, which leverages `rsync` under the hood for orders-of-magnitude faster syncs. It only supports local folder targets (or a plain `dol.Files`).
+Use `sshdol.sync_to(src, target)`, which leverages `rsync` under the hood for orders-of-magnitude faster syncs. It only supports local folder targets (a path).
 
 ```python
 from sshdol import SshFiles, sync_to
-import dol
 
 src = SshFiles(host="myserver", rootdir="/remote/path")
 
 # Sync to a local path (fast; uses rsync)
 sync_to(src, "/local/target/folder")
 
-# Or sync to a dol.Files instance (a plain one; its .rootdir is the local folder)
-dst = dol.Files("/local/target/folder")
-sync_to(src, dst)
+# A pathlib.Path works too. An object with a .rootdir (even a dol.Files) is refused:
+# its view may be narrower than its rootdir, and --delete would prune the rest.
 ```
 
 Notes:
 - Requires `rsync` installed locally.
-- `sync_to` is scoped by the store's `rootdir`, not by any key view (this is why it is a free function: `SshFiles.sync_to` was removed, because a method of a `dol`-wrapped store runs on the leaf, i2mint/sshdol#6). It therefore refuses a store wrapped in a `dol` key codec or filter (`WrappedStoreError`), since it would copy files the view hides and `--delete` against the wrong tree. State a sub-scope explicitly: `sync_to(src, "/local/dir", subdir="projects")`. The `target` must be a path or a plain `dol.Files`; for any other (wrapped, subclassed) target pass its directory as a path string.
-- Target must be a local filesystem path or a plain `dol.Files`.
+- `sync_to` is scoped by the store's `rootdir`, not by any key view (this is why it is a free function: `SshFiles.sync_to` was removed, because a method of a `dol`-wrapped store runs on the leaf, i2mint/sshdol#6). It therefore refuses a store wrapped in a `dol` key codec or filter (`WrappedStoreError`), since it would copy files the view hides and `--delete` against the wrong tree. State a sub-scope explicitly: `sync_to(src, "/local/dir", subdir="projects")`. The `target` must be a path (for a `dol.Files` target, pass its directory).
+- Target must be a local filesystem path.
 - You can control deletion timing and safety:
 
 ```python

@@ -23,6 +23,7 @@ from typing import (
 )
 from collections.abc import Mapping, MutableMapping, Iterator
 import os
+import re
 import stat
 import subprocess
 import shutil
@@ -262,31 +263,23 @@ def _is_wrapped(obj) -> bool:
 
 
 def _resolve_sync_target(target) -> str:
-    """The local directory a ``sync_to`` target denotes.
+    """The local directory a ``sync_to`` target denotes: a path (``str`` / ``PathLike``).
 
-    A path (``str`` / ``PathLike``) is itself. The only object accepted is a plain
-    ``dol.Files`` (exact type, no ``subpath`` / ``pattern_for_field``): anything else, such as
-    a key codec, a filter, a subclass or a class wrap, may show a narrower view than its
-    ``.rootdir``, which is the leaf's, and ``rsync --delete`` would then prune the whole
-    ``rootdir`` (i2mint/sshdol#6). For those, pass the local directory path.
+    An object with a ``.rootdir`` (even a plain ``dol.Files``) is refused: its ``.rootdir``
+    is the leaf's, and the view it shows may be narrower (key codec, filter, ``subpath``,
+    ``max_levels``, hidden files...), so ``rsync --delete`` would prune files the view never
+    showed (i2mint/sshdol#6). Pass the local directory path.
     """
     if isinstance(target, (str, os.PathLike)):
         return os.fspath(target)
-    from dol import Files
-
-    rootdir = getattr(target, "rootdir", None)
-    if (
-        type(target) is Files
-        and isinstance(rootdir, str)
-        and not getattr(target, "subpath", "")
-        and getattr(target, "pattern_for_field", None) is None
-    ):
-        return rootdir
     raise WrappedStoreError(
-        f"sync_to target {type(target).__name__} is not a path or a plain dol.Files: its "
-        f".rootdir may be wider than the view it shows, and rsync --delete would act on "
-        f"all of it (i2mint/sshdol#6). Pass the local directory path instead."
+        f"sync_to target must be a local directory path, got {type(target).__name__}: an "
+        f"object's .rootdir may be wider than the view it shows, and rsync --delete would "
+        f"act on all of it (i2mint/sshdol#6). Pass the directory path instead."
     )
+
+
+_SAFE_SUBDIR = re.compile(r"^[\w./@%+=:,-]+$")  # no spaces/shell metacharacters (old rsyncs)
 
 
 class SshFilesReader(Mapping):
@@ -1076,6 +1069,11 @@ class SshFiles(SshFilesReader, MutableMapping):
         # Ensure trailing slash to copy contents of rootdir into target directory
         remote_root = self.rootdir.rstrip("/")
         if subdir:
+            if not _SAFE_SUBDIR.match(subdir):
+                raise ValueError(
+                    f"subdir has characters outside [\\w./@%+=:,-]: {subdir!r} "
+                    "(rsync may split them in the remote shell)"
+                )
             remote_root += "/" + self._key_to_path(subdir).rstrip("/")
         remote_src = f"{self._conn_user}@{self._conn_host}:{remote_root}/"
         local_dst = os.path.join(target, "")

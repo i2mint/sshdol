@@ -143,27 +143,18 @@ def local(tmp_path):
     return tmp_path / "local"
 
 
-def test_sync_to_plain_dol_files_target_ok(leaf, rsync, local):
-    sync_to(leaf, dol.Files(str(local)))
-    assert rsync[0][-1] == str(local) + "/"
-
-
-def test_sync_to_refuses_every_narrowed_target(leaf, rsync, local):
+def test_sync_to_refuses_every_object_target(leaf, rsync, local):
     root = str(local)
-
-    class MyFiles(dol.Files):
-        pass
 
     class Plain:  # the formerly documented "anything with a .rootdir"
         rootdir = root
 
     targets = {
+        "plain dol.Files": dol.Files(root),
+        "max_levels": dol.Files(root, max_levels=0),
         "prefixed instance": subdir_view(dol.Files(root), "mirror/"),
-        "filter instance": filt_iter(dol.Files(root), filt=lambda k: k.endswith(".txt")),
         "filter class wrap": filt_iter(filt=lambda k: k.endswith(".txt"))(dol.Files)(root),
-        "prefixed class wrap": KeyCodecs.prefixed("mirror/")(dol.Files)(root),
         "subpath": dol.Files(root, subpath="mirror"),
-        "subclass": MyFiles(root),
         "plain object": Plain(),
     }
     for name, tgt in targets.items():
@@ -172,8 +163,20 @@ def test_sync_to_refuses_every_narrowed_target(leaf, rsync, local):
     assert rsync == []
 
 
+def test_sync_to_pathlike_target_ok(leaf, rsync, local):
+    sync_to(leaf, local)
+    assert rsync[0][-1] == str(local) + "/"
+
+
 def test_sync_to_explicit_subdir(leaf, rsync, tmp_path):
     sync_to(leaf, tmp_path / "d", subdir="sub/")
     assert rsync[0][-2] == "u@h:/remote/root/sub/"
     with pytest.raises(KeyError, match="outside rootdir"):
         sync_to(leaf, tmp_path / "d", subdir="../etc")
+
+
+@pytest.mark.parametrize("bad", ["a b", "x;rm -rf ~", "$(id)", "a`id`"])
+def test_sync_to_subdir_metacharacters_refused(leaf, rsync, tmp_path, bad):
+    with pytest.raises(ValueError, match="subdir"):
+        sync_to(leaf, tmp_path / "d", subdir=bad)
+    assert rsync == []
