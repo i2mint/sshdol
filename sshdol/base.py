@@ -901,7 +901,18 @@ class SshFiles(SshFilesReader, MutableMapping):
     """
 
     def _on_missing_rootdir(self, rootdir):
-        """Create a missing ``rootdir`` (with its parents) if ``create_dirs``, else refuse."""
+        """Create a missing ``rootdir`` (with its parents, like ``mkdir -p``; a failure part-way
+        leaves the parents made so far) if ``create_dirs``, else refuse.
+
+        A ``~`` is not expanded by SFTP, so it is refused rather than created as a directory
+        literally named ``~``.
+        """
+        if rootdir.startswith("~"):
+            raise FileNotFoundError(
+                errno.ENOENT,
+                f"rootdir {rootdir!r}: SFTP does not expand '~'; give the path (or a "
+                "path relative to the login directory)",
+            )
         if not self._create_dirs:
             raise FileNotFoundError(
                 errno.ENOENT,
@@ -914,7 +925,11 @@ class SshFiles(SshFilesReader, MutableMapping):
             try:
                 self._sftp.stat(prefix)
             except OSError:
-                self._sftp.mkdir(prefix)
+                try:
+                    self._sftp.mkdir(prefix)
+                except OSError:
+                    if not self._is_dir(prefix):  # lost a race to another creator: fine
+                        raise
             prefix += "/"
         self._sftp.chdir(rootdir)
 

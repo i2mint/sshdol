@@ -16,7 +16,8 @@ MISSING = SSH_TEST_ROOTDIR.rstrip("/") + "_missing/a/b"
 
 @pytest.fixture
 def admin_sftp():
-    sftp = SshFiles(host=SSH_TEST_HOST, rootdir=".")._sftp
+    admin = SshFiles(host=SSH_TEST_HOST, rootdir=".")  # keep alive: its __del__ closes the sftp
+    sftp = admin._sftp
     top = MISSING.rsplit("/a/b", 1)[0]
 
     def rm_top():
@@ -49,3 +50,34 @@ def test_create_dirs_creates_the_missing_rootdir(admin_sftp):
 
 def test_existing_rootdir_unchanged(admin_sftp):
     SshFiles(host=SSH_TEST_HOST, rootdir=SSH_TEST_ROOTDIR, create_dirs=True)
+
+
+@pytest.mark.parametrize("create_dirs", [False, True])
+def test_tilde_rootdir_is_refused_not_created_literally(admin_sftp, create_dirs):
+    with pytest.raises(FileNotFoundError, match="expand"):
+        SshFiles(host=SSH_TEST_HOST, rootdir="~/nope", create_dirs=create_dirs)
+    assert "~" not in admin_sftp.listdir(".")
+
+
+def test_losing_a_creation_race_is_fine(admin_sftp, monkeypatch):
+    import paramiko
+
+    real_stat = paramiko.SFTPClient.stat
+    calls = []
+
+    def stat_misses_once(self, path):  # as if the directory appeared right after the check
+        if path == MISSING.rsplit("/a/b", 1)[0] and not calls:
+            calls.append(path)
+            admin_sftp.mkdir(path)
+            raise FileNotFoundError(2, path)
+        return real_stat(self, path)
+
+    monkeypatch.setattr(paramiko.SFTPClient, "stat", stat_misses_once)
+    store = SshFiles(host=SSH_TEST_HOST, rootdir=MISSING, create_dirs=True)
+    assert calls and list(store) == []
+
+
+def test_rootdir_deleted_after_construction_lists_nothing_not_home(admin_sftp):
+    store = SshFiles(host=SSH_TEST_HOST, rootdir=MISSING, create_dirs=True, max_levels=None)
+    admin_sftp.rmdir(MISSING)
+    assert list(store) == [] and "py" not in store
