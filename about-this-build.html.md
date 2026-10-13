@@ -2,18 +2,16 @@
 
 # About this build
 
-This documentation was built on **2026-10-13 11:03 UTC** from commit <a href="https://github.com/i2mint/sshdol/commit/d763d772044afaed7669831700c647484e4468a7"><code>d763d77</code></a> on branch <code>master</code>, for **sshdol 0.0.11** (from <code>pyproject.toml</code>).
+This documentation was built on **2026-10-13 11:17 UTC** from commit <a href="https://github.com/i2mint/sshdol/commit/bf560e85ac4e6ad4f5707515a1351c73ade16e97"><code>bf560e8</code></a> on branch <code>master</code>, for **sshdol 0.0.12** (from <code>pyproject.toml</code>).
 
-#### WARNING
-The documentation and the package may be misaligned:
-
-- The documented version (0.0.11) is behind the latest release on PyPI (0.0.12): `pip install sshdol` gives newer code than these docs describe.
+#### NOTE
+Nothing suggests a mismatch: the tree was clean at the commit above, and the documented version is the one on PyPI.
 
 ## Source
 
 |                     |                                                                                                                                                      |
 |---------------------|------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Commit              | <a href="https://github.com/i2mint/sshdol/commit/d763d772044afaed7669831700c647484e4468a7"><code>d763d772044afaed7669831700c647484e4468a7</code></a> |
+| Commit              | <a href="https://github.com/i2mint/sshdol/commit/bf560e85ac4e6ad4f5707515a1351c73ade16e97"><code>bf560e85ac4e6ad4f5707515a1351c73ade16e97</code></a> |
 | Branch              | <code>master</code>                                                                                                                                  |
 | Tags at this commit | none                                                                                                                                                 |
 | Working tree        | clean                                                                                                                                                |
@@ -24,9 +22,9 @@ The documentation and the package may be misaligned:
 |              |                                                                                            |
 |--------------|--------------------------------------------------------------------------------------------|
 | Repository   | <code>i2mint/sshdol</code>                                                                 |
-| Run          | <a href="https://github.com/i2mint/sshdol/actions/runs/38387439862">38387439862</a>        |
+| Run          | <a href="https://github.com/i2mint/sshdol/actions/runs/38389034112">38389034112</a>        |
 | Ref          | <code>refs/heads/master</code>                                                             |
-| Event commit | <code>d763d772044afaed7669831700c647484e4468a7</code> (in the history of the built commit) |
+| Event commit | <code>bf560e85ac4e6ad4f5707515a1351c73ade16e97</code> (in the history of the built commit) |
 
 ## Tools
 
@@ -51,13 +49,13 @@ The documentation and the package may be misaligned:
 
 ## Package on PyPI
 
-Latest release: <a href="https://pypi.org/project/sshdol/0.0.12/">0.0.12</a>, newer than the documented version (0.0.11).
+Latest release: <a href="https://pypi.org/project/sshdol/0.0.12/">0.0.12</a>, the same as the documented version.
 
 ## Reproduce
 
 ```bash
 git clone https://github.com/i2mint/sshdol && cd sshdol
-git checkout d763d772044afaed7669831700c647484e4468a7
+git checkout bf560e85ac4e6ad4f5707515a1351c73ade16e97
 pip install "epythet==0.2.15"
 epythet quickstart . --ignore tests/ scrap/ examples/
 ```

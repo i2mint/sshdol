@@ -1,32 +1,32 @@
 {
   "schema_version": 1,
-  "built_at": "2026-10-13T11:03:15Z",
+  "built_at": "2026-10-13T11:17:15Z",
   "package": {
     "name": "sshdol",
-    "version": "0.0.11",
+    "version": "0.0.12",
     "display_name": "sshdol",
     "source": "pyproject.toml"
   },
   "git": {
     "available": true,
-    "commit": "d763d772044afaed7669831700c647484e4468a7",
-    "short_commit": "d763d77",
+    "commit": "bf560e85ac4e6ad4f5707515a1351c73ade16e97",
+    "short_commit": "bf560e8",
     "branch": "master",
     "tags": [],
     "dirty": false,
     "remote_url": "https://github.com/i2mint/sshdol",
-    "commit_url": "https://github.com/i2mint/sshdol/commit/d763d772044afaed7669831700c647484e4468a7",
+    "commit_url": "https://github.com/i2mint/sshdol/commit/bf560e85ac4e6ad4f5707515a1351c73ade16e97",
     "error": null
   },
   "ci": {
     "provider": "github",
     "repository": "i2mint/sshdol",
-    "sha": "d763d772044afaed7669831700c647484e4468a7",
+    "sha": "bf560e85ac4e6ad4f5707515a1351c73ade16e97",
     "sha_in_history": true,
     "ref": "refs/heads/master",
     "ref_name": "master",
-    "run_id": "38387439862",
-    "run_url": "https://github.com/i2mint/sshdol/actions/runs/38387439862",
+    "run_id": "38389034112",
+    "run_url": "https://github.com/i2mint/sshdol/actions/runs/38389034112",
     "server_url": "https://github.com"
   },
   "tools": {
@@ -61,15 +61,13 @@
   "pypi": {
     "checked": true,
     "latest": "0.0.12",
-    "relation": "behind",
+    "relation": "same",
     "error": null
   },
-  "reproduce": "git clone https://github.com/i2mint/sshdol && cd sshdol\ngit checkout d763d772044afaed7669831700c647484e4468a7\npip install \"epythet==0.2.15\"\nepythet quickstart . --ignore tests/ scrap/ examples/",
+  "reproduce": "git clone https://github.com/i2mint/sshdol && cd sshdol\ngit checkout bf560e85ac4e6ad4f5707515a1351c73ade16e97\npip install \"epythet==0.2.15\"\nepythet quickstart . --ignore tests/ scrap/ examples/",
   "warnings": [],
   "alignment": {
-    "aligned": false,
-    "notes": [
-      "The documented version (0.0.11) is behind the latest release on PyPI (0.0.12): `pip install sshdol` gives newer code than these docs describe."
-    ]
+    "aligned": true,
+    "notes": []
   }
 }
