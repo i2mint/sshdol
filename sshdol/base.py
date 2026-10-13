@@ -104,6 +104,24 @@ def escapes_root(path: str) -> bool:
     return normalized == ".." or normalized.startswith("../")
 
 
+_LINK_FOLLOWING_RSYNC_ARGS = ("-L", "--copy-links", "--copy-unsafe-links", "-k", "--copy-dirlinks")
+MAX_SYMLINK_HOPS = 40  # same order as the kernel's ELOOP limit
+
+
+def is_within(real_path: str, real_root: str) -> bool:
+    """Whether an absolute, symlink-free ``real_path`` is ``real_root`` or below it.
+
+    >>> is_within('/srv/data/a/b', '/srv/data'), is_within('/srv/data', '/srv/data')
+    (True, True)
+    >>> is_within('/srv/data2/a', '/srv/data'), is_within('/etc', '/srv/data')
+    (False, False)
+    >>> is_within('/anything', '/')
+    True
+    """
+    root = real_root.rstrip("/")
+    return real_path == real_root or real_path.startswith(root + "/")
+
+
 class RejectUnknownHostKey(paramiko.RejectPolicy):
     """Refuse hosts whose key is not in known_hosts, with a message saying what to do."""
 
@@ -354,9 +372,10 @@ class SshFilesReader(Mapping):
                             If False (default), it will return False for such paths
                             Design notes: https://github.com/i2mint/sshdol/issues/1#issuecomment-2714508482
             allow_escape: If False (default), keys are confined to ``rootdir``:
-                       absolute keys and keys whose ``..`` segments leave it raise
-                       ``KeyError`` (and ``in`` returns False). Symbolic links on
-                       the server are not resolved by this check.
+                       absolute keys, keys whose ``..`` segments leave it and keys
+                       that resolve outside it through a symbolic link on the server
+                       raise ``KeyError`` (and ``in`` returns False). ``sync_to``
+                       skips links pointing outside the synced tree.
             missing_host_key_policy: What to do when the server's host key is not
                        in ``known_hosts`` (system, user, or the config's
                        ``UserKnownHostsFile``). Default: follow the host's ssh
@@ -487,6 +506,64 @@ class SshFilesReader(Mapping):
             )
         return path
 
+    def _real_root(self):
+        """Absolute, symlink-free path of ``rootdir`` on the server (cached)."""
+        root = getattr(self, "_real_root_cache", None)
+        if root is None:
+            root = self._real_root_cache = self._sftp.normalize(".")
+        return root
+
+    def _real_path(self, path, *, _hops=0):
+        """Absolute path on the server that ``path`` (relative to rootdir) addresses, with
+        every symbolic link resolved, including a dangling one and ones among components
+        that do not exist yet. Raises ``KeyError`` for a link loop, or for a ``..`` after a
+        component that does not exist.
+        """
+        if _hops > MAX_SYMLINK_HOPS:
+            raise KeyError(f"Too many levels of symbolic links: {path}")
+        try:
+            return self._sftp.normalize(path)
+        except OSError:
+            pass  # not (fully) existing: resolve the parent, then look at the last name
+        parent, _, name = path.rstrip("/").rpartition("/")
+        if name in ("", ".", ".."):
+            raise KeyError(f"Cannot resolve path through a missing directory: {path}")
+        real_parent = self._real_path(
+            parent or ("/" if path.startswith("/") else "."), _hops=_hops
+        )
+        candidate = posixpath.join(real_parent, name)
+        try:
+            is_link = stat.S_ISLNK(self._sftp.lstat(candidate).st_mode)
+        except OSError:
+            return candidate  # really absent
+        if is_link:  # dangling (else normalize would have succeeded): follow its target
+            target = posixpath.join(real_parent, self._sftp.readlink(candidate))
+            return self._real_path(target, _hops=_hops + 1)
+        return candidate
+
+    def _confined_path(self, k, *, follow_final=True):
+        """Like ``_key_to_path``, and also refuse (``KeyError``) a key that, through a
+        symbolic link on the server, resolves outside rootdir (i2mint/sshdol#11).
+
+        With ``follow_final=False`` a link in the *last* position is not followed: for
+        operations such as delete that act on the link itself. The check and the operation
+        are separate round trips, so a link swapped in between is not caught.
+        """
+        path = self._key_to_path(k)
+        if getattr(self, "_allow_escape", False) or not path:
+            return path
+        head, _, name = path.rpartition("/")
+        if follow_final or name in ("", ".", ".."):
+            real = self._real_path(path)
+        else:
+            real = posixpath.join(self._real_path(head or "."), name)
+        if not is_within(real, self._real_root()):
+            raise KeyError(
+                f"Key resolves outside rootdir through a symbolic link "
+                f"(pass allow_escape=True to allow): {k}"
+            )
+        return path
+
     def _is_dir(self, path):
         """Check if a path is a directory"""
         try:
@@ -502,7 +579,7 @@ class SshFilesReader(Mapping):
             quoted_root = shlex.quote(self.rootdir)
             quoted_path = shlex.quote(normalize_path(path))
             cmd = (
-                f"cd {quoted_root} 2>/dev/null || true; "
+                f"cd -P -- {quoted_root} 2>/dev/null || exit 1; "
                 f"if [ -e {quoted_path} ]; then echo 0; else echo 1; fi"
             )
             stdin, stdout, stderr = self._ssh.exec_command(cmd)
@@ -558,7 +635,7 @@ class SshFilesReader(Mapping):
             find_cmd = (
                 f"find . -mindepth 1 {maxdepth_clause}{prune_hidden}-printf '%y\t%P\n'"
             )
-            cmd = f"set -e; cd {quoted_root} 2>/dev/null || true; {find_cmd}"
+            cmd = f"set -e; cd -P -- {quoted_root} 2>/dev/null || exit 1; {find_cmd}"
             stdin, stdout, stderr = self._ssh.exec_command(cmd)
             data = stdout.read()
             text = (
@@ -611,13 +688,34 @@ class SshFilesReader(Mapping):
             )
         return True
 
+    def _subdir_store(self, path):
+        """A new instance (own connection) rooted at directory ``path`` of this one.
+
+        Its rootdir is the *resolved* path, not ``rootdir/path`` as text: the remote shell
+        (listing, ``in``) and SFTP must agree on where ``..`` after a symbolic link leads
+        (i2mint/sshdol#11).
+        """
+        if self._allow_escape:
+            new_rootdir = (
+                path
+                if self.rootdir == "."
+                else f"{self.rootdir.rstrip('/')}/{path}"
+            )
+        else:
+            new_rootdir = self._real_path(path)
+        return type(self)(
+            **self._init_params,
+            rootdir=new_rootdir,
+            _pinned_host_key=getattr(self, "_pinned_host_key", None),
+        )
+
     def __getitem__(self, k):
         """
         Get contents of a file or return a new instance for directories.
         Supports path-based keys with slashes for nested files.
         Respects max_levels constraint for reading.
         """
-        path = self._key_to_path(k)
+        path = self._confined_path(k)
 
         # Check if path exceeds allowed depth
         self._check_path_depth(path)
@@ -639,26 +737,7 @@ class SshFilesReader(Mapping):
 
             # Check if the whole path is a directory
             if is_dir:
-                # Create a new instance for this subdirectory
-                params = self._init_params.copy()
-
-                # Create new path by joining current rootdir with the key
-                if self.rootdir == ".":
-                    new_rootdir = path
-                else:
-                    new_rootdir = (
-                        f"{self.rootdir}/{path}"
-                        if not self.rootdir.endswith("/")
-                        else f"{self.rootdir}{path}"
-                    )
-
-                # Create a completely new connection for the subdirectory
-                new_instance = type(self)(
-                    **params,
-                    rootdir=new_rootdir,
-                    _pinned_host_key=getattr(self, "_pinned_host_key", None),
-                )
-                return new_instance
+                return self._subdir_store(path)
 
             # Try to open as a file
             try:
@@ -673,26 +752,7 @@ class SshFilesReader(Mapping):
 
         # Handle direct directory or file access (no slashes)
         if is_dir:
-            # Create a new instance for this subdirectory
-            params = self._init_params.copy()
-
-            # Create new path by joining current rootdir with the key
-            if self.rootdir == ".":
-                new_rootdir = path
-            else:
-                new_rootdir = (
-                    f"{self.rootdir}/{path}"
-                    if not self.rootdir.endswith("/")
-                    else f"{self.rootdir}{path}"
-                )
-
-            # Create a completely new connection for the subdirectory
-            new_instance = type(self)(
-                **params,
-                rootdir=new_rootdir,
-                _pinned_host_key=getattr(self, "_pinned_host_key", None),
-            )
-            return new_instance
+            return self._subdir_store(path)
 
         # If it's a file, return its contents
         try:
@@ -758,7 +818,7 @@ class SshFilesReader(Mapping):
             else:
                 type_clause = "-type f"
             find_cmd = f"find . -mindepth 1 {maxdepth_clause}{prune_hidden}{type_clause} -print | wc -l"
-            cmd = f"set -e; cd {quoted_root} 2>/dev/null || true; {find_cmd}"
+            cmd = f"set -e; cd -P -- {quoted_root} 2>/dev/null || exit 1; {find_cmd}"
             stdin, stdout, stderr = self._ssh.exec_command(cmd)
             out = stdout.read().decode().strip()
             return int(out) if out.isdigit() else 0
@@ -775,7 +835,7 @@ class SshFilesReader(Mapping):
         See https://github.com/i2mint/sshdol/issues/1#issuecomment-2714508482
         """
         try:
-            path = self._key_to_path(k)
+            path = self._confined_path(k)
         except KeyError:
             return False
 
@@ -872,7 +932,7 @@ class SshFiles(SshFilesReader, MutableMapping):
         Respects max_levels constraint for writing.
         """
         # Check if path exceeds allowed depth
-        path = self._key_to_path(k)
+        path = self._confined_path(k)
         self._check_path_depth(path)
 
         # Handle encoding based on the _encoding attribute
@@ -906,14 +966,18 @@ class SshFiles(SshFilesReader, MutableMapping):
         """
         Delete a file on the SSH server.
         """
-        path = self._key_to_path(k)
+        path = self._confined_path(k, follow_final=False)
 
-        if not self._path_exists(path):
+        try:
+            is_link = stat.S_ISLNK(self._sftp.lstat(path).st_mode)
+        except OSError:
             raise KeyError(k)
 
         try:
+            if is_link:
+                self._sftp.remove(path)  # the link itself, never its target
             # Check if it's a directory
-            if self._is_dir(path):
+            elif self._is_dir(path):
                 # Check if it's empty
                 entries = self._list_directory(path)
                 if entries:
@@ -932,7 +996,7 @@ class SshFiles(SshFilesReader, MutableMapping):
         Returns the normalized path. This is the primitive shared by the ``mkdir`` method
         and :func:`sshdol.ops.mkdir`.
         """
-        path = self._key_to_path(path)
+        path = self._confined_path(path)
 
         # Check if directory already exists
         if self._path_exists(path):
@@ -1013,7 +1077,11 @@ class SshFiles(SshFilesReader, MutableMapping):
             recycle_bin: When delete_mode='recycle', directory to store deleted items.
                 Defaults to the OS recycle location (macOS: ~/.Trash, Linux: ~/.local/share/Trash/files).
             compress: If True, use -z compression.
-            extra_args: Additional rsync args (list of strings) to append.
+            extra_args: Additional rsync args (list of strings) to append. Unless the
+                store has ``allow_escape=True``, link-following ones (``-L``, ``-k``,
+                ``--copy-links``, ``--copy-unsafe-links``, ``--copy-dirlinks``) are refused
+                and ``--safe-links`` is passed, which skips absolute symbolic links and
+                relative ones that leave the synced tree (judged by their text).
 
         Raises:
             RuntimeError: If rsync is unavailable or the sync fails.
@@ -1067,6 +1135,15 @@ class SshFiles(SshFilesReader, MutableMapping):
                     )
                 rsync_cmd.append(delete_flag_map[delete_mode])
 
+        if not self._allow_escape:  # links in the tree must not point out of it
+            followed = [a for a in extra_args or () if a in _LINK_FOLLOWING_RSYNC_ARGS]
+            if followed:
+                raise ValueError(
+                    f"extra_args {followed} make rsync follow links out of rootdir; "
+                    "pass allow_escape=True to the store to allow that"
+                )
+            rsync_cmd.append("--safe-links")
+
         # Allow caller-supplied extra args before operands
         if extra_args:
             rsync_cmd.extend(extra_args)
@@ -1080,7 +1157,7 @@ class SshFiles(SshFilesReader, MutableMapping):
                     f"subdir has characters outside [\\w./@%+=:,-]: {subdir!r} "
                     "(rsync may split them in the remote shell)"
                 )
-            remote_root += "/" + self._key_to_path(subdir).rstrip("/")
+            remote_root += "/" + self._confined_path(subdir).rstrip("/")
         remote_src = f"{self._conn_user}@{self._conn_host}:{remote_root}/"
         local_dst = os.path.join(target, "")
         rsync_cmd += [remote_src, local_dst]

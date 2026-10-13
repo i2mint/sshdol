@@ -1,0 +1,171 @@
+"""Symbolic links under rootdir must not lead outside it (i2mint/sshdol#11).
+
+Integration tests: they need the SSH test server (see ``test_base``) and skip without one.
+"""
+
+import posixpath
+
+import pytest
+
+from sshdol.base import SshFiles
+from sshdol.ops import mkdir, sync_to
+from sshdol.tests.test_base import _ssh_available
+from sshdol.tests.utils_for_testing import SSH_TEST_HOST, SSH_TEST_ROOTDIR
+
+pytestmark = pytest.mark.skipif(
+    not _ssh_available(), reason="no SSH test server reachable"
+)
+
+BASE = SSH_TEST_ROOTDIR.rstrip("/") + "_symlinks"  # root/ and outside/ live under it
+
+
+@pytest.fixture
+def stores():
+    """(store over BASE/root, sftp, BASE/outside) with a clean slate; removed after."""
+    admin = SshFiles(host=SSH_TEST_HOST, rootdir=".")
+    sftp = admin._sftp
+
+    def rm_rf(path):
+        try:
+            entries = sftp.listdir_attr(path)
+        except OSError:
+            return
+        for e in entries:
+            child = posixpath.join(path, e.filename)
+            if sftp.lstat(child).st_mode & 0o170000 == 0o040000:
+                rm_rf(child)
+            else:
+                sftp.remove(child)
+        sftp.rmdir(path)
+
+    rm_rf(BASE)
+    for d in (BASE, BASE + "/root", BASE + "/root/sub", BASE + "/outside"):
+        sftp.mkdir(d)
+    with sftp.file(BASE + "/outside/secret.txt", "wb") as f:
+        f.write(b"secret")
+    with sftp.file(BASE + "/root/sub/inside.txt", "wb") as f:
+        f.write(b"inside")
+    store = SshFiles(host=SSH_TEST_HOST, rootdir=BASE + "/root", max_levels=None)
+    yield store, sftp, BASE + "/outside"
+    rm_rf(BASE)
+
+
+def test_link_to_outside_file_refused(stores):
+    store, sftp, outside = stores
+    sftp.symlink(outside + "/secret.txt", BASE + "/root/leak")
+    assert "leak" not in store
+    with pytest.raises(KeyError, match="symbolic link"):
+        store["leak"]
+    with pytest.raises(KeyError, match="symbolic link"):
+        store["leak"] = b"overwritten"
+    assert sftp.file(outside + "/secret.txt").read() == b"secret"
+
+
+def test_link_to_outside_directory_refused(stores):
+    store, sftp, outside = stores
+    sftp.symlink(outside, BASE + "/root/out")
+    for key in ("out", "out/secret.txt", "out/new.txt"):
+        assert key not in store
+        with pytest.raises(KeyError, match="symbolic link"):
+            store[key]
+    with pytest.raises(KeyError, match="symbolic link"):
+        store["out/new.txt"] = b"x"
+    with pytest.raises(KeyError, match="symbolic link"):
+        mkdir(store, "out/newdir")
+    assert sftp.listdir(outside) == ["secret.txt"]
+
+
+def test_relative_link_to_outside_refused(stores):
+    store, sftp, _ = stores
+    sftp.symlink("../outside/secret.txt", BASE + "/root/rel")
+    with pytest.raises(KeyError, match="symbolic link"):
+        store["rel"]
+
+
+def test_dotdot_through_link_resolved_physically(stores):
+    store, sftp, _ = stores
+    sftp.symlink(BASE + "/outside", BASE + "/root/out")
+    # lexically 'out/../x' is root/x; on the server 'out/..' is the parent of outside/
+    with pytest.raises(KeyError, match="symbolic link"):
+        store["out/../outside/secret.txt"]
+    assert store["out/../root/sub/inside.txt"] == b"inside"  # that one is inside
+
+
+def test_dangling_link_to_outside_refused_for_write(stores):
+    store, sftp, outside = stores
+    sftp.symlink(outside + "/not_yet.txt", BASE + "/root/dangling")
+    with pytest.raises(KeyError, match="symbolic link"):
+        store["dangling"] = b"planted"
+    assert "not_yet.txt" not in sftp.listdir(outside)
+
+
+def test_link_loop_refused(stores):
+    store, sftp, _ = stores
+    sftp.symlink("loop_b", BASE + "/root/loop_a")
+    sftp.symlink("loop_a", BASE + "/root/loop_b")
+    with pytest.raises(KeyError):
+        store["loop_a"] = b"x"
+
+
+def test_link_inside_root_still_works(stores):
+    store, sftp, _ = stores
+    sftp.symlink("sub", BASE + "/root/alias")
+    assert store["alias/inside.txt"] == b"inside"
+    store["alias/new.txt"] = b"n"
+    assert store["sub/new.txt"] == b"n"
+
+
+def test_delete_removes_the_link_not_the_target(stores):
+    store, sftp, outside = stores
+    sftp.symlink(outside + "/secret.txt", BASE + "/root/leak")
+    sftp.symlink(outside, BASE + "/root/out")
+    del store["leak"]
+    del store["out"]
+    assert sorted(sftp.listdir(BASE + "/root")) == ["sub"]
+    assert sftp.listdir(outside) == ["secret.txt"]
+
+
+def test_allow_escape_opts_out(stores):
+    _, sftp, outside = stores
+    sftp.symlink(outside + "/secret.txt", BASE + "/root/leak")
+    store = SshFiles(host=SSH_TEST_HOST, rootdir=BASE + "/root", allow_escape=True)
+    assert store["leak"] == b"secret"
+
+
+def test_sync_to_subdir_symlink_refused_and_links_skipped(stores, tmp_path):
+    store, sftp, outside = stores
+    sftp.symlink(outside, BASE + "/root/out")
+    with pytest.raises(KeyError, match="symbolic link"):
+        sync_to(store, tmp_path / "d1", subdir="out")
+    sftp.symlink(outside + "/secret.txt", BASE + "/root/sub/leak")
+    sync_to(store, tmp_path / "d2")
+    assert (tmp_path / "d2" / "sub" / "inside.txt").read_bytes() == b"inside"
+    assert not (tmp_path / "d2" / "sub" / "leak").exists()
+    assert not (tmp_path / "d2" / "sub" / "leak").is_symlink()
+
+
+def test_subdir_instance_listing_agrees_with_sftp_on_dotdot_after_link(stores):
+    """Shell ``cd`` used to resolve ``..`` by text, listing the outside directory."""
+    store, sftp, outside = stores
+    sftp.mkdir(BASE + "/root/sub/a")
+    sftp.mkdir(BASE + "/root/sub/Y")
+    sftp.symlink(BASE + "/root/sub/a", BASE + "/root/deep")
+    sftp.symlink(outside, BASE + "/root/Y")
+    # physically deep/../Y is root/sub/Y (inside); textually it is root/Y -> outside
+    child = store["deep/../Y"]
+    assert list(child) == [] and len(child) == 0
+    assert "secret.txt" not in child
+
+
+def test_missing_rootdir_shell_listing_is_empty_not_home(stores):
+    gone = SshFiles(
+        host=SSH_TEST_HOST, rootdir=BASE + "/root/does_not_exist", max_levels=None
+    )
+    assert list(gone) == [] and "py" not in gone
+
+
+@pytest.mark.parametrize("flag", ["-L", "--copy-links", "--copy-unsafe-links", "-k"])
+def test_sync_to_refuses_link_following_args(stores, tmp_path, flag):
+    store, _, _ = stores
+    with pytest.raises(ValueError, match="allow_escape"):
+        sync_to(store, tmp_path / "d", extra_args=[flag])
